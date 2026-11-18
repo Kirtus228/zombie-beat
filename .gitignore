@@ -1,0 +1,8 @@
+.godot/
+build/
+caps/
+ref/
+logs/
+shots/
+*.log
+*.mp4
