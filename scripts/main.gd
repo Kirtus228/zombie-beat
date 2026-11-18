@@ -15,6 +15,11 @@ const ZOMBIE_DAMAGE := 5
 const PLAYER_HP := 280
 const ZOMBIE_HP := 90   # ~8 ударов по 12: успевает упасть серией и встать, потом добивается   # враг теперь падает только с пятого удара — бой длиннее, HP поднят
 const ZOMBIE_ATK_CD := 1.0
+# Замах врага перед ударом (#001): враг подходит, стоит и только потом бьёт.
+# Свой разброс — иначе толпа бьёт синхронно, как метроном.
+const WINDUP_MIN := 0.45
+const WINDUP_MAX := 0.9
+const MAX_WINDUP := 2   # одновременно готовятся не больше двух
 # Четыре места вокруг героя: слева, справа, за спиной, перед ним.
 # Четыре места: по два с каждого бока, на разной глубине. Никто не встаёт
 # прямо перед героем — иначе его тело накрывает героя и это читается как слипание.
@@ -281,7 +286,13 @@ func _resolve_player_hit() -> void:
 	last_hit_n = 0
 	if targets.is_empty():
 		return
+	# Сначала те, кто ближе по глубине: удар не должен задевать две разные
+	# полосы сразу (#004). Внутри полосы — по расстоянию.
 	targets.sort_custom(func(a, b):
+		var da: float = absf(a.position.y - player.position.y)
+		var db: float = absf(b.position.y - player.position.y)
+		if absf(da - db) > 6.0:
+			return da < db
 		return absf(a.position.x - player.position.x) < absf(b.position.x - player.position.x)
 	)
 	var n: int = mini(MAX_HIT_TARGETS, targets.size())
@@ -301,9 +312,19 @@ func _update_enemies(delta: float) -> void:
 	for e in enemies:
 		if e.dead:
 			continue
-		# оглушённый или лежащий не идёт к своему месту и не бьёт
+		# оглушённый или лежащий не идёт к своему месту и не бьёт; замах сорван
 		if e.stun > 0.0 or e.knocked:
+			e.set_meta("windup", 0.0)
 			e.move_by(Vector2.ZERO)
+			continue
+		# замах: враг стоит на месте и готовится, а не напирает (#001)
+		var windup: float = float(e.get_meta("windup", 0.0))
+		if windup > 0.0:
+			windup = maxf(0.0, windup - delta)
+			e.set_meta("windup", windup)
+			e.move_by(Vector2.ZERO)
+			if windup <= 0.0:
+				_enemy_strike(e)
 			continue
 		var slot: int = int(e.get_meta("slot", -1))
 		if slot < 0:
@@ -322,9 +343,10 @@ func _update_enemies(delta: float) -> void:
 		if a.dead:
 			continue
 		if not player.dead:
-			# герой тяжёлый: его почти не сдвигают, отлетает враг — иначе толпа
-			# расталкивает игрока по всему экрану без всякого ввода
-			_resolve_overlap(a, player, BODY_RX, BODY_RY, 0.9, 0.1)
+			# Врага продавить нельзя (#002): двигается только сам герой, враг
+			# стоит на месте. Иначе ГГ толкал тело перед собой и бил неуязвимую
+			# цель, которая «уезжала» вместе с ударом.
+			_resolve_overlap(a, player, BODY_RX, BODY_RY, 0.0, 1.0)
 		for j in range(i + 1, enemies.size()):
 			var b: Node2D = enemies[j]
 			if b.dead:
@@ -345,9 +367,17 @@ func _update_enemies(delta: float) -> void:
 	# урон не проходит, а кулдаун сгорает — и толпа почти не наносит урона
 	if player.invuln > 0.0:
 		return
+	var busy := 0
+	for e in enemies:
+		if not e.dead and float(e.get_meta("windup", 0.0)) > 0.0:
+			busy += 1
+	if busy >= MAX_WINDUP:
+		return
 	var ready: Array[Node2D] = []
 	for e in enemies:
 		if e.dead or e.knocked or e.stun > 0.0 or int(e.get_meta("slot", -1)) < 0 or e.attack_cd > 0.0:
+			continue
+		if float(e.get_meta("windup", 0.0)) > 0.0:
 			continue
 		# право удара — по факту «в зоне», а не по точному достижению точки:
 		# разведение и движение героя не дают встать в точку с точностью до 3 px
@@ -359,12 +389,25 @@ func _update_enemies(delta: float) -> void:
 	if ready.is_empty():
 		return
 	ready.sort_custom(func(x, y): return int(x.get_meta("arrived_at", 0)) < int(y.get_meta("arrived_at", 0)))
+	# Не бьём сразу: даём герою окно уйти из зоны и запускаем замах.
 	var striker: Node2D = ready[0]
-	striker.try_attack()
-	attacker = striker
+	striker.set_meta("windup", randf_range(WINDUP_MIN, WINDUP_MAX))
+	strike_lock = STRIKE_GAP
+
+# Удар в конце замаха: если герой успел выйти из зоны — это промах (#001).
+func _enemy_strike(e: Node2D) -> void:
+	if player.dead or e.dead or e.stun > 0.0 or e.knocked:
+		return
+	if player.invuln > 0.0:
+		return
+	if absf(player.position.x - e.position.x) > REACH_X or absf(player.position.y - e.position.y) > REACH_Y:
+		return
+	if not e.try_attack():
+		return
+	attacker = e
 	strike_lock = STRIKE_GAP
 	_spawn_fx(player.position)
-	player.take_hit(ZOMBIE_DAMAGE, int(signf(player.position.x - striker.position.x)))
+	player.take_hit(ZOMBIE_DAMAGE, int(signf(player.position.x - e.position.x)))
 
 func _slot_taken(slot: int, except: Node2D) -> bool:
 	for e in enemies:
@@ -377,7 +420,12 @@ func _slot_taken(slot: int, except: Node2D) -> bool:
 func _claim_slot(e: Node2D) -> int:
 	# сначала места на своей стороне, потом на противоположной — чтобы не идти сквозь героя
 	# 0,1 — левая сторона; 2,3 — правая. Сначала свои места, потом чужие.
-	var own: int = 1 if e.position.x >= player.position.x else 0
+	var own: int
+	if player.state == "punch1" or player.state == "punch2":
+		# герой замахнулся: враг обходит и встаёт со стороны спины (#003)
+		own = 0 if player.facing > 0 else 1
+	else:
+		own = 1 if e.position.x >= player.position.x else 0
 	var other: int = 1 - own
 	for s in [own * 2, own * 2 + 1, other * 2, other * 2 + 1]:
 		if not _slot_taken(int(s), e):
