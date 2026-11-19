@@ -50,12 +50,22 @@ func _init() -> void:
 	ok(esf.get_frame_count("z_atk") >= 4, "z_atk из 4+ кадров: %d" % esf.get_frame_count("z_atk"))
 	ok(not esf.has_animation("punch1"), "человеческого прямого удара у зомби НЕТ")
 	ok(esf.has_animation("z_ready"), "у зомби есть видимый замах z_ready")
-	# в ударе зомби не должно быть кадров прыжка: иначе он «подпрыгивает» при ударе
+	# в ударе зомби не должно быть кадров прыжка и «падения»: оба ломают высоту
+	# корпуса, из-за них зомби подскакивал в момент удара
 	var airy := false
 	for fr in enemy.Z_ATK_FRAMES:
-		if String(fr) == "jump" or String(fr) == "jumpkick":
+		if String(fr) == "jump" or String(fr) == "jumpkick" or String(fr) == "falling":
 			airy = true
-	ok(not airy, "в z_atk нет кадров прыжка (ноги на земле)")
+	ok(not airy, "в z_atk нет кадров прыжка/падения (ноги на земле)")
+
+	# удар читается: кадр когтей стоит в анимации ровно в момент касания
+	ok(ResourceLoader.exists("res://assets/zombie/claw_go.png"), "кадр когтей claw_go есть")
+	ok(ResourceLoader.exists("res://assets/zombie_brain/claw_go.png"), "кадр когтей есть и у зомби с мозгом")
+	ok(enemy.Z_CONTACT_T > 0.0 and enemy.Z_CONTACT_T < enemy.Z_ATK_HOLD, "касание внутри удара: %.2f < %.2f" % [enemy.Z_CONTACT_T, enemy.Z_ATK_HOLD])
+	var contact_idx := int(enemy.Z_CONTACT_T * enemy.Z_ATK_FPS)
+	ok(String(enemy.Z_ATK_FRAMES[contact_idx]) == "claw_go", "в момент касания в кадре когти (кадр %d)" % contact_idx)
+	# замах длиннее самой быстрой реакции глаза: когти видно до выпада
+	ok(enemy.Z_ATK_HOLD >= 0.5, "удар не мелькает: %.2f с" % enemy.Z_ATK_HOLD)
 	# шаг зомби медленнее человеческого
 	ok(esf.get_animation_speed("walk") < hsf.get_animation_speed("walk"), "шаг зомби медленнее героя: %.1f против %.1f" % [esf.get_animation_speed("walk"), hsf.get_animation_speed("walk")])
 

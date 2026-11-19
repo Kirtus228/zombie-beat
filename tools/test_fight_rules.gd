@@ -61,10 +61,17 @@ func _init() -> void:
 	if float(e2.get_meta("windup", 0.0)) <= 0.0:
 		print("FAIL #001: замах не начался"); fails += 1
 
-	# --- #001: урон в конце замаха только если герой в зоне
+	# --- #001: в конце замаха удар НЕ бьёт мгновенно: урон ждёт кадра когтей
 	m.player.hp = 280
 	m.player.invuln = 0.0
+	e2.attack_cd = 0.0
 	m._enemy_strike(e2)
+	if float(e2.get_meta("contact", -1.0)) <= 0.0:
+		print("FAIL #001: касание не запланировано"); fails += 1
+	if m.player.hp != 280:
+		print("FAIL #001: урон пришёл в начале рывка (hp=%d)" % m.player.hp); fails += 1
+	# касание наступает через Z_CONTACT_T — тогда урон и проходит
+	m._update_enemies(F.Z_CONTACT_T + 0.02)
 	if m.player.hp != 275:
 		print("FAIL #001: удар в зоне не прошёл (hp=%d)" % m.player.hp); fails += 1
 
@@ -73,6 +80,7 @@ func _init() -> void:
 	e2.attack_cd = 0.0
 	e2.position = Vector2(450, 470)
 	m._enemy_strike(e2)
+	m._update_enemies(F.Z_CONTACT_T + 0.02)
 	if m.player.hp != 280:
 		print("FAIL #001: удар прошёл вне зоны (hp=%d)" % m.player.hp); fails += 1
 

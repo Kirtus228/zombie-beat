@@ -14,15 +14,18 @@ const ZOMBIE_BRAIN_DIR := "res://assets/zombie_brain/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
-const Z_ATK_HOLD := 0.55
-# Удар зомби — три такта, как в принципах анимации: замах -> удар -> отход.
-# Только кадры, где ноги на земле: из набора убраны jump/jumpkick, иначе зомби
-# «подпрыгивает» в момент удара (замечание Кирилла 20.11).
-# Свои кадры зомби (tools/draw_zombie.ps1): шаркающая походка и удар сверху.
-# Сделаны параметрически, чтобы силуэт читался как зомби, а не как человек.
-# стойка зомби своя, чтобы при остановке не мигали кадры пака другой пропорции
-const Z_ATK_FRAMES: Array[String] = ["falling", "punch2_1", "punch2_1", "falling"]
-const Z_READY_FRAME := "punch2_0"
+# Удар зомби — три такта: замах (когти отведены) -> выпад с раскрытыми когтями
+# -> отход. Каждый кадр держится по 0,1 с, поэтому когти видны, а не мелькают.
+# Кадры: claw_wind (пак punch2_0), claw_go (пак punch2_2 с раскрытой когтистой
+# кистью — tools/claw_frames.mjs), claw_back (пак punch2_1).
+# Кадр falling из удара убран: он на 15 px ниже и ломал высоту корпуса, из-за
+# него зомби «подпрыгивал» в момент удара (замечание Кирилла 20.11).
+const Z_ATK_FRAMES: Array[String] = ["claw_wind", "claw_wind", "claw_go", "claw_go", "claw_go", "claw_back"]
+const Z_ATK_FPS := 10.0
+const Z_ATK_HOLD := 0.6        # длина всей анимации удара, с
+const Z_CONTACT_T := 0.2       # момент касания внутри удара: на нём включается урон
+const Z_LUNGE := 20.0          # рывок корпуса к цели, px
+const Z_READY_FRAME := "claw_wind"
 const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px
@@ -112,7 +115,7 @@ func _build_frames() -> SpriteFrames:
 	# кинулся (jump), добил когтями (punch2_1). Анимаций с человеческим прямым
 	# кулаком у врага в наборе НЕТ вообще (punch1/punch2 собираются только герою).
 	if is_enemy:
-		_add(sf, "z_atk", Z_ATK_FRAMES, 9.0, false)
+		_add(sf, "z_atk", Z_ATK_FRAMES, Z_ATK_FPS, false)
 		# замах: враг видимо отводит когти назад, пока идёт пауза перед ударом
 		_add(sf, "z_ready", [Z_READY_FRAME], 1.0, false)
 	# «лежит на земле»: отдельный кадр (tools/make_down_frame.ps1). Если его нет —
@@ -233,10 +236,17 @@ func _process(delta: float) -> void:
 				body.rotation = deg_to_rad((6.0 + rock) * float(facing))
 		else:
 			body.rotation = 0.0
-	# рывок зомби вперёд: корпус уходит вперёд и возвращается (ноги остаются на земле)
+	# рывок зомби вперёд: к моменту касания корпус уже у цели, потом возвращается
+	# (ноги остаются на земле — вверх ничего не поднимается)
 	var lunge := 0.0
 	if state == "z_atk":
-		lunge = 10.0 * sin(PI * clampf(t / Z_ATK_HOLD, 0.0, 1.0)) * float(facing)
+		var k := clampf(t / Z_ATK_HOLD, 0.0, 1.0)
+		var reach := Z_CONTACT_T / Z_ATK_HOLD
+		if k < reach:
+			lunge = Z_LUNGE * smoothstep(0.0, reach, k)
+		else:
+			lunge = Z_LUNGE * (1.0 - smoothstep(reach, 1.0, k))
+		lunge *= float(facing)
 	if body:
 		body.position = Vector2(lunge + sway, -CELL_FEET * SPRITE_SCALE - lift)
 	if state == "z_atk":

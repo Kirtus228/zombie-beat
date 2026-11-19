@@ -17,6 +17,8 @@ func _ready() -> void:
 		return
 	var txt := f.get_as_text().strip_edges()
 	f.close()
+	# слово "idle" — это режим (без автопилота), оно не часть чисел
+	txt = txt.replace("idle", "").strip_edges()
 	if txt.contains(":"):
 		var parts := txt.split(":")
 		total = maxi(1, int(parts[0]))

@@ -353,6 +353,19 @@ func _update_groans(delta: float) -> void:
 func _update_enemies(delta: float) -> void:
 	if strike_lock > 0.0:
 		strike_lock -= delta
+	# 0) касание удара: урон приходит на кадре когтей, а не в начале рывка
+	for e in enemies:
+		if e.dead or e.state != "z_atk":
+			continue
+		var ct: float = float(e.get_meta("contact", -1.0))
+		if ct < 0.0:
+			continue
+		ct -= delta
+		if ct > 0.0:
+			e.set_meta("contact", ct)
+			continue
+		e.set_meta("contact", -1.0)
+		_resolve_strike(e)
 	# 1) у каждого врага своё место вокруг героя; кому места нет — ждёт в стороне
 	for e in enemies:
 		if e.dead:
@@ -360,6 +373,7 @@ func _update_enemies(delta: float) -> void:
 		# оглушённый или лежащий не идёт к своему месту и не бьёт; замах сорван
 		if e.stun > 0.0 or e.knocked:
 			e.set_meta("windup", 0.0)
+			e.set_meta("contact", -1.0)
 			if e.state == "z_ready" or e.state == "z_atk":
 				e.set_state("idle")
 			e.move_by(Vector2.ZERO)
@@ -456,11 +470,23 @@ func _enemy_strike(e: Node2D) -> void:
 		return
 	attacker = e
 	strike_lock = STRIKE_GAP
-	if player.invuln > 0.0:
+	# Урон, искры и звук — не в начале анимации, а на кадре когтей: иначе вспышка
+	# срабатывала раньше, чем рука доходила до героя (замечание Кирилла 20.11).
+	e.set_meta("contact", Fighter.Z_CONTACT_T)
+
+# Момент касания: когти уже у цели. Попал — искры на кончике когтей и отдача,
+# промахнулся (герой отошёл или прыгнул) — слышно, как когти прошли мимо.
+func _resolve_strike(e: Node2D) -> void:
+	if player.dead or e.dead:
 		return
-	if absf(player.position.x - e.position.x) > REACH_X or absf(player.position.y - e.position.y) > REACH_Y:
+	var dx: float = absf(player.position.x - e.position.x)
+	var dy: float = absf(player.position.y - e.position.y)
+	if dx > REACH_X or dy > REACH_Y or player.invuln > 0.0 or player.airborne:
+		Sfx.play_var("swing", -8.0, 0.1)
 		return
-	_spawn_fx(player.position)
+	# искры — у корпуса героя со стороны удара: когти попадают в него, а не
+	# мимо (если ставить их посередине, вспышка висит в воздухе между телами)
+	_spawn_fx(player.position + Vector2(float(-e.facing) * 4.0, 0.0), float(e.facing))
 	Sfx.play_var("hit", -2.0, 0.12)   # попадание по герою — глуше и ниже
 	player.take_hit(ZOMBIE_DAMAGE, int(signf(player.position.x - e.position.x)))
 
@@ -521,8 +547,9 @@ func _resolve_overlap(a: Node2D, b: Node2D, rx: float, ry: float, share_a := 0.5
 		a.position.y -= diry * push_y * share_a
 		b.position.y += diry * push_y * share_b
 
-func _spawn_fx(at: Vector2) -> void:
+func _spawn_fx(at: Vector2, slash := 0.0) -> void:
 	var fx: Node2D = HitFx.new()
+	fx.slash = slash
 	fx.position = Vector2(at.x, at.y - 70.0)
 	# только внутри world: иначе у вспышки отдельная очередь рисования
 	world.add_child(fx)
