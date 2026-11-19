@@ -1,4 +1,4 @@
-# Зомби «с открытым мозгом»: красное только от макушки до линии глаз (~12 px).
+# Зомби «с открытым мозгом»: только от макушки до линии глаз (~12 px), извилины волной.
 # Позиция головы берётся от верхней точки силуэта в кадре.
 param([string]$Only = "")
 
@@ -9,9 +9,11 @@ $OutDir = Join-Path $PSScriptRoot "..\assets\zombie_brain"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 function C([int]$r,[int]$g,[int]$b){ [System.Drawing.Color]::FromArgb(255,$r,$g,$b) }
-$BRAIN  = C 214 150 150
-$BRAIN1 = C 188 118 124
-$BRAIN2 = C 236 180 172
+$BRAIN  = C 210 142 148   # тело извилины
+$BRAIN1 = C 186 118 128   # полутень
+$BRAIN2 = C 240 184 180   # гребень извилины
+$GROOVE = C 156 90 104    # борозда
+$EDGE   = C 118 60 76     # край среза и контур
 $BAND = 13   # высота «крышки черепа» до глаз, px
 
 function Is-Skin($c) { $c.A -ge 40 -and $c.G -gt 140 -and $c.R -gt 110 -and $c.R -lt 190 -and $c.B -gt 100 -and $c.B -lt 170 }
@@ -43,18 +45,39 @@ foreach ($f in $files) {
   if ($top -eq 9999) { $top = 40 }
   $brainBottom = [int]$top + 12
 
+  # рамка «крышки»: все непрозрачные пиксели выше линии глаз
+  $minx = 99999; $maxx = -1; $miny = 99999
+  for ($y = 0; $y -lt $brainBottom; $y++) {
+    for ($x = 0; $x -lt $w; $x++) {
+      if ($img.GetPixel($x, $y).A -ge 40) {
+        if ($x -lt $minx) { $minx = $x }
+        if ($x -gt $maxx) { $maxx = $x }
+        if ($y -lt $miny) { $miny = $y }
+      }
+    }
+  }
+  if ($maxx -lt 0) { $minx = 0; $maxx = $w - 1; $miny = $top }
+  $midX = ($minx + $maxx) / 2.0
+  $cy = $miny + ($brainBottom - 1 - $miny) / 2.0
+
   $out = [System.Drawing.Bitmap]::new($w, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
   for ($y = 0; $y -lt $h; $y++) {
     for ($x = 0; $x -lt $w; $x++) {
       $c = $img.GetPixel($x, $y)
       if ($c.A -lt 40 -or $y -ge $brainBottom) { $out.SetPixel($x, $y, $c); continue }
-      if ($true) {
-        $band = ($x + $y) % 7
-        if ($band -lt 2) { $n = $BRAIN1 } elseif ($band -lt 5) { $n = $BRAIN } else { $n = $BRAIN2 }
-        $out.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($c.A, $n.R, $n.G, $n.B))
-      } else {
-        $out.SetPixel($x, $y, $c)
-      }
+      # извилины: вложенные волнообразные контуры вокруг центра головы (вид в профиль)
+      $dx = $x - $midX
+      $dy = $y - $cy
+      # поле из двух перекрещенных волн: изолинии получаются рваными завитками,
+      # а не концентрическими кольцами
+      $fld = [math]::Sin($x * 0.80 + 1.4 * [math]::Sin($y * 0.55)) * [math]::Cos($y * 1.15 + 1.2 * [math]::Sin($x * 0.42))
+      if ((Is-Dark $c) -and $y -gt $miny + 1) { $n = $EDGE }                # тёмный контур головы
+      elseif ($y -eq $brainBottom - 1) { $n = $EDGE }                        # тёмный край среза черепа
+      elseif ($fld -lt -0.45) { $n = $GROOVE }                               # борозда
+      elseif ($fld -gt 0.45) { $n = $BRAIN2 }                                # гребень извилины
+      else { $n = $BRAIN }                                                   # тело извилины
+      if ($n -eq $BRAIN2 -and $y -ge $brainBottom - 3) { $n = $BRAIN }        # низ ближе к срезу — в тени
+      $out.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($c.A, $n.R, $n.G, $n.B))
     }
   }
   $dst = Join-Path $OutDir $f.Name
