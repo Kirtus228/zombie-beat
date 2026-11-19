@@ -39,6 +39,7 @@ const WAIT_DIST := 150.0   # где ждёт враг без свободног�
 const MAX_ACTIVE := 4      # в кадре до четырёх: остальные ждут за краем
 const WAVES := [[3, 0.0], [4, 0.0], [5, 0.0]]
 const WAVE_DELAY := 2.5
+const RUN_MULT := 1.55   # бег на Shift
 
 var player: Node2D
 var enemies: Array[Node2D] = []
@@ -217,8 +218,17 @@ func _build_hud() -> void:
 	msg_label.add_theme_constant_override("outline_size", 8)
 
 	hud.add_child(msg_label)
+	# подсказка по управлению: раскладка битэмапа (удар — ЛКМ/Space, прыжок — K, бег — Shift)
+	var hint := Label.new()
+	hint.text = "WASD — шаг   SHIFT — бег   ЛКМ / SPACE — удар   K — прыжок   M — звук   R — заново"
+	hint.position = Vector2(28, 506)
+	hint.add_theme_font_size_override("font_size", 16)
+	hint.add_theme_color_override("font_color", Color(0.72, 0.76, 0.82))
+	hud.add_child(hint)
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("mute"):
+		AudioServer.set_bus_mute(0, not AudioServer.is_bus_mute(0))
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 		return
@@ -245,11 +255,15 @@ func _update_player(_delta: float) -> void:
 	)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	player.move_by(dir * player.speed * _delta)
+	# бег на удержание Shift (в битэмапах бег — это удержание, а не отдельная кнопка)
+	var run := RUN_MULT if Input.is_action_pressed("run") else 1.0
+	player.move_by(dir * player.speed * run * _delta)
 	player.position.x = clampf(player.position.x, ARENA_MIN_X, ARENA_MAX_X)
 	player.position.y = clampf(player.position.y, ARENA_TOP, ARENA_BOTTOM)
 	player.z_index = int(player.position.y)
 	cam.position.x = clampf(player.position.x, 480.0, 1120.0)
+	if Input.is_action_just_pressed("jump"):
+		player.jump()
 	if Input.is_action_just_pressed("attack") and player.try_attack():
 		attacks += 1
 		attack_pending = 0.14
@@ -277,6 +291,9 @@ func _demo_ai(delta: float) -> void:
 		signf(dx) if absf(dx) > 64.0 else 0.0,
 		signf(dy) if absf(dy) > 10.0 else 0.0
 	)
+	# в записи кадров иногда прыгаем и бьём в воздухе — иначе прыжок не увидеть в caps/
+	if not player.airborne and randf() < 0.03:
+		player.jump()
 	if dir.length() > 0.0:
 		player.move_by(dir.normalized() * player.speed * delta)
 	player.position.x = clampf(player.position.x, ARENA_MIN_X, ARENA_MAX_X)

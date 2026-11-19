@@ -255,7 +255,7 @@ function Convert-Frame($path, $outPath) {
 
 $want = @{}
 if ($Only -ne "") { foreach ($n in $Only.Split(",")) { $want[$n.Trim()] = $true } }
-$names = @("idle","falling","punch1_0","punch1_1","punch2_0","punch2_1","punch2_2","walk_0","walk_3","walk_4","walk_5","walk_6","walk_7","walk_8")
+$names = @("idle","falling","punch1_0","punch1_1","punch2_0","punch2_1","punch2_2","walk_0","walk_3","walk_4","walk_5","walk_6","walk_7","walk_8","jump","jumpkick")
 foreach ($n in $names) {
   if ($want.Count -gt 0 -and -not $want.ContainsKey($n)) { continue }
   $src = Join-Path $SrcDir "$n.png"

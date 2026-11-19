@@ -14,6 +14,9 @@ const ZOMBIE_BRAIN_DIR := "res://assets/zombie_brain/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
+const Z_ATK_HOLD := 0.55   # зомби бьёт не кулаком: сгорбился, кинулся, когти
+const JUMP_TIME := 0.52    # прыжок: время в воздухе
+const JUMP_H := 58.0       # высота дуги прыжка, px
 # серия ударов: пять подряд роняют врага, недобитая серия оставляет оглушение
 const COMBO_WINDOW := 1.0   # сколько ждём следующий удар, чтобы серия продолжилась
 const KILL_COMBO := 5       # столько ударов подряд — цель падает
@@ -45,6 +48,8 @@ var combo_timer := 0.0  # через сколько серия сбрасыва�
 var stun := 0.0         # оглушение: не двигается и не бьёт
 var knocked := false    # лежит после серии: не бьёт, его не бьют, встанет
 var knock_timer := 0.0
+var airborne := false   # в прыжке
+var air_t := 0.0
 
 func _ready() -> void:
 	shadow = Shadow.new()
@@ -82,10 +87,20 @@ func _build_frames() -> SpriteFrames:
 		walking.append("walk_%d" % i)
 	_add(sf, "idle", ["idle"], 4.0, true)
 	_add(sf, "walk", walking, 12.0, true)
-	# медленнее и с двумя проходами по кадрам: успевает читаться кадр с вытянутой рукой
-	_add(sf, "punch1", ["punch1_0", "punch1_1", "punch1_1", "punch1_1"], 10.0, false)
-	_add(sf, "punch2", ["punch2_0", "punch2_1", "punch2_2", "punch2_2", "punch2_2"], 10.0, false)
+	if not is_enemy:
+		# медленнее и с двумя проходами по кадрам: успевает читаться кадр с вытянутой рукой
+		_add(sf, "punch1", ["punch1_0", "punch1_1", "punch1_1", "punch1_1"], 10.0, false)
+		_add(sf, "punch2", ["punch2_0", "punch2_1", "punch2_2", "punch2_2", "punch2_2"], 10.0, false)
 	_add(sf, "hurt", ["falling"], 1.0, false)
+	# прыжок и удар в прыжке: кадры пака (assets/jampa/guy1*/jump*.png), герою
+	# они перекрашены tools/recolor_hero.ps1
+	_add(sf, "jump", ["jump"], 1.0, false)
+	_add(sf, "jumpkick", ["jumpkick"], 1.0, false)
+	# удар зомби: не боксёрский прямой из пака, а рывок телом — сгорбился (falling),
+	# кинулся (jump), добил когтями (punch2_1). Анимаций с человеческим прямым
+	# кулаком у врага в наборе НЕТ вообще (punch1/punch2 собираются только герою).
+	if is_enemy:
+		_add(sf, "z_atk", ["falling", "jump", "jump", "punch2_1"], 9.0, false)
 	# «лежит на земле»: отдельный кадр (tools/make_down_frame.ps1). Если его нет —
 	# падаем на старый кадр падения, чтобы игра не осталась без позы
 	_add(sf, "down", ["down"], 1.0, false)
@@ -167,9 +182,28 @@ func _process(delta: float) -> void:
 		# тень гаснет вместе с телом, иначе после смерти на асфальте остаются её эллипсы
 		if shadow:
 			shadow.modulate.a = a
-	if (state == "punch1" or state == "punch2") and t > PUNCH_HOLD:
+	# прыжок: дуга вверх; пока в воздухе, удары зомби не достают (invuln = время прыжка)
+	var lift := 0.0
+	if airborne:
+		air_t += delta
+		lift = JUMP_H * sin(PI * clampf(air_t / JUMP_TIME, 0.0, 1.0))
+		if air_t >= JUMP_TIME:
+			airborne = false
+			air_t = 0.0
+			if state == "jump" or state == "jumpkick":
+				set_state("idle")
+	# рывок зомби вперёд: корпус уходит на 16 px и возвращается
+	var lunge := 0.0
+	if state == "z_atk":
+		lunge = 16.0 * sin(PI * clampf(t / Z_ATK_HOLD, 0.0, 1.0)) * float(facing)
+	if body:
+		body.position = Vector2(lunge, -CELL_FEET * SPRITE_SCALE - lift)
+	if state == "z_atk":
+		if t > Z_ATK_HOLD:
+			set_state("idle")
+	elif (state == "punch1" or state == "punch2") and t > PUNCH_HOLD:
 		set_state("idle")
-	elif state != "down":
+	elif not airborne and state != "down":
 		# гистерезис: в стойку только после 0.15 с покоя, иначе анимация мигает
 		# «шаг ↔ стойка» каждый кадр и враг выглядит дёргающимся
 		if moving:
@@ -192,13 +226,28 @@ func move_by(v: Vector2) -> void:
 	else:
 		_sync()
 
+# Прыжок: короткая дуга, в воздухе героя не достать. Кадры — из пака (jump),
+# удар в воздухе — jumpkick.
+func jump() -> bool:
+	if dead or airborne or knocked or stun > 0.0:
+		return false
+	airborne = true
+	air_t = 0.0
+	invuln = maxf(invuln, JUMP_TIME)
+	set_state("jump")
+	return true
+
 func try_attack() -> bool:
 	if dead or attack_cd > 0.0:
 		return false
 	attack_cd = atk_cooldown
-	# зомби на замахе рычит, герой — свистит кулаком
-	Sfx.play_var("z_attack" if is_enemy else "swing", -2.0 if is_enemy else 0.0, 0.08)
-	set_state("punch1" if randf() < 0.5 else "punch2")
+	if is_enemy:
+		# зомби на замахе рычит и кидается корпусом, а не бьёт боксёрским прямым
+		Sfx.play_var("z_attack", -2.0, 0.08)
+		set_state("z_atk")
+	else:
+		Sfx.play_var("swing", 0.0, 0.08)
+		set_state("jumpkick" if airborne else ("punch1" if randf() < 0.5 else "punch2"))
 	t = 0.0
 	return true
 
