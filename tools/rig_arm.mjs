@@ -1,8 +1,8 @@
 
-// Риг руки зомби: тело и ноги — кадр пака idle целиком, НИЧЕГО не заливаем.
-// Стирается только поднятая рука пака правее плеча (она в воздухе, за ней фон),
-// и на её месте рисуется своя рука в нужной фазе: вверх -> вниз.
-// Вторая рука (у груди) остаётся паковской — зомби и так стоит с одной рукой у груди.
+// Рука удара в стиле пака: ТОЛСТЫЙ ЧЁРНЫЙ КОНТУР (2 px) и тонкая кожа внутри —
+// как у паковских рук и ног (skin 4-7 px + ink 2-3 px по сторонам).
+// Тело и вторая рука — кадр пака idle, не тронуты. Стирается только поднятая
+// рука пака правее плеча (за ней фон, торс не задет).
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import path from 'node:path';
@@ -12,11 +12,9 @@ const SRC = path.join(ROOT, 'assets/zombie');
 const SHOTS = path.join(ROOT, 'shots');
 
 const SKIN = [152, 182, 138], INK = [34, 36, 30], NAIL = [188, 202, 176];
-const SHOULDER = { x: 162, y: 106 };
-const ERASE = { x0: 164, x1: 210, y0: 80, y1: 132 };
-// отдельный «остаток» паковского предплечья ниже плеча: сам он не нужен,
-// потому что руку рисуем свою
-const ERASE_FLAP = { x0: 157, x1: 168, y0: 108, y1: 134 };
+const SH = { x: 164, y: 100 };
+const ERASE = { x0: 164, x1: 210, y0: 78, y1: 132 };
+const ERASE_FLAP = { x0: 159, x1: 170, y0: 104, y1: 132 };
 
 function decodePNG(file) {
   const buf = fs.readFileSync(file);
@@ -66,19 +64,11 @@ function encodePNG(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
-const idle = decodePNG(path.join(SRC, 'idle.png'));
-const W = idle.w, H = idle.h;
+const base = decodePNG(path.join(SRC, 'idle.png'));
+const W = base.w, H = base.h;
 
-function build(chain, hand) {
-  const d = new Uint8Array(idle.data);
-  // стираем только руку пака правее плеча — за ней фон, торс не задет
-  const boxes = [ERASE, ERASE_FLAP];
-  for (const b of boxes)
-    for (let y = b.y0; y <= b.y1; y++)
-      for (let x = b.x0; x <= b.x1; x++) {
-        const i = (y * W + x) * 4;
-        d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
-      }
+// строим руку: наружный силуэт -> контур 2 px -> кожа внутри
+function drawArm(outer, core, chain, hand, inkPx) {
   const M = new Uint8Array(W * H);
   const mark = (cx, cy, rx, ry) => {
     for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
@@ -95,67 +85,89 @@ function build(chain, hand) {
       mark(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r0 + (r1 - r0) * t, r0 + (r1 - r0) * t);
     }
   };
-  const put = (x, y, col) => {
-    x = Math.round(x); y = Math.round(y);
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    const i = (y * W + x) * 4;
-    d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
-  };
-  // плечо: круг, который перекрывает паковское плечо и стыкуется с торсом
-  mark(SHOULDER.x, SHOULDER.y, 7.0, 8.0);
+  // плечо (широкое, уходит под майку)
+  mark(SH.x, SH.y, 6.5, 7.5);
   for (let i = 0; i < chain.length - 1; i++) {
     const a = chain[i], b = chain[i + 1];
     capsule(a.x, a.y, b.x, b.y, a.r, b.r);
   }
-  // кисть
+  // кисть: ладонь и пальцы — наружным радиусом на 1 px больше кожи
   const wrist = chain[chain.length - 1];
-  mark(wrist.x, wrist.y, hand.palm + 0.8, hand.palm + 1.3);
+  mark(wrist.x, wrist.y, hand.palm, hand.palm + 1);
   const a0 = hand.ang * Math.PI / 180, sp = hand.spread * Math.PI / 180;
   const tips = [];
   for (let k = -2; k <= 1; k++) {
-    const ang = a0 + (k / 1.6) * sp;
-    const bx = wrist.x + Math.cos(ang) * hand.palm * 0.6, by = wrist.y + Math.sin(ang) * hand.palm * 0.6;
+    const ang = a0 + (k / 1.7) * sp;
+    const bx = wrist.x + Math.cos(ang) * (hand.palm - 1), by = wrist.y + Math.sin(ang) * (hand.palm - 1);
     const tx = wrist.x + Math.cos(ang) * hand.len, ty = wrist.y + Math.sin(ang) * hand.len;
     tips.push({ x: tx, y: ty });
-    capsule(bx, by, tx, ty, 3.4, 2.2);
+    capsule(bx, by, tx, ty, 2.6, 1.9);
   }
-  const th = a0 + sp * 2.1;
-  capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * hand.len * 0.58, wrist.y + Math.sin(th) * hand.len * 0.58, 3.2, 2.2);
-  // контур только по границе с фоном
-  const opaque = (x, y) => d[(y * W + x) * 4 + 3] > 40;
-  const ink = new Uint8Array(W * H);
+  const th = a0 + sp * 2.0;
+  capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * hand.len * 0.62, wrist.y + Math.sin(th) * hand.len * 0.62, 2.5, 1.9);
+
+  // ядро = эрозия наружного силуэта на inkPx
+  const inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H && M[y * W + x];
+  const K = new Uint8Array(W * H);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (!M[y * W + x]) continue;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++) {
+      let ok = true;
+      for (let dy = -inkPx; dy <= inkPx && ok; dy++)
+        for (let dx = -inkPx; dx <= inkPx && ok; dx++)
+          if (!inside(x + dx, y + dy)) ok = false;
+      if (ok) K[y * W + x] = 1;
+    }
+  const put = (x, y, c) => {
+    const i = (y * W + x) * 4;
+    outer[i] = c[0]; outer[i + 1] = c[1]; outer[i + 2] = c[2]; outer[i + 3] = 255;
+  };
+  // контур: только там, где фон (на теле контура нет — рука выходит из-под майки)
+  const opaqueBase = (x, y) => base.data[(y * W + x) * 4 + 3] > 40 && !K[y * W + x];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!M[y * W + x]) continue;
+      if (K[y * W + x]) continue;
+      // контур рисуем, если рядом фон или уже нарисованный контур
+      let nearBg = false;
+      for (let dy = -1; dy <= 1 && !nearBg; dy++)
+        for (let dx = -1; dx <= 1 && !nearBg; dx++) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-          if (!M[ny * W + nx] && !opaque(nx, ny)) ink[ny * W + nx] = 1;
+          if (!M[ny * W + nx] && !opaqueBase(nx, ny)) nearBg = true;
         }
+      if (nearBg) put(x, y, INK);
     }
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ink[y * W + x]) put(x, y, INK);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (M[y * W + x]) put(x, y, SKIN);
-  for (const t of tips) put(t.x, t.y, NAIL);
-  return d;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) if (K[y * W + x]) put(x, y, core);
+  for (const t of tips) put(Math.round(t.x), Math.round(t.y), NAIL);
+  return outer;
 }
 
-// 1) замах: рука вскинута над головой, когти раскрыты
-const wind = build(
-  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 168, y: 86, r: 6.0 }, { x: 177, y: 66, r: 5.0 }],
-  { ang: -80, spread: 30, len: 13, palm: 4.4 },
-);
-// 2) удар: рука проходит вниз-вперёд, когти у корпуса героя
-const go = build(
-  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 181, y: 112, r: 6.0 }, { x: 195, y: 121, r: 5.0 }],
-  { ang: 20, spread: 32, len: 12, palm: 4.4 },
-);
-// 3) проводка: когти уходят вниз
-const back = build(
-  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 176, y: 129, r: 6.0 }, { x: 182, y: 145, r: 5.0 }],
-  { ang: 72, spread: 30, len: 11, palm: 4.2 },
-);
+function build(chain, hand, inkPx) {
+  const d = new Uint8Array(base.data);
+  for (const b of [ERASE, ERASE_FLAP])
+    for (let y = b.y0; y <= b.y1; y++)
+      for (let x = b.x0; x <= b.x1; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
+      }
+  return drawArm(d, SKIN, chain, hand, inkPx);
+}
 
-for (const [n, d] of [['wind', wind], ['go', go], ['back', back]])
-  fs.writeFileSync(path.join(SHOTS, 'rig-' + n + '.png'), encodePNG(W, H, d));
-console.log('ok rig-wind/go/back');
+const variants = {
+  A: { ink: 2, chain: { wind: [[{ x: SH.x, y: SH.y, r: 5.6 }, { x: 170, y: 84, r: 4.6 }, { x: 176, y: 66, r: 3.8 }], { ang: -84, spread: 30, len: 12, palm: 4 }] } },
+};
+// три варианта толщины/формы (ink 2 px у всех — как у пака)
+const make = (ink, bw) => ({
+  wind: [[{ x: SH.x, y: SH.y, r: bw }, { x: 170, y: 84, r: bw - 1.0 }, { x: 176, y: 66, r: bw - 1.8 }], { ang: -84, spread: 30, len: 12, palm: bw - 1.4 }],
+  go: [[{ x: SH.x, y: SH.y, r: bw }, { x: 181, y: 113, r: bw - 1.0 }, { x: 194, y: 121, r: bw - 1.8 }], { ang: 22, spread: 32, len: 12, palm: bw - 1.4 }],
+  back: [[{ x: SH.x, y: SH.y, r: bw }, { x: 175, y: 129, r: bw - 1.0 }, { x: 181, y: 144, r: bw - 1.8 }], { ang: 76, spread: 30, len: 11, palm: bw - 1.6 }],
+});
+const sets = { A: make(1, 6.0), B: make(2, 6.5), C: make(2, 7.5) };
+for (const [k, set] of Object.entries(sets))
+  for (const phase of ['wind', 'go', 'back']) {
+    const d = build(set[phase][0], set[phase][1], k === 'A' ? 1 : 2);
+    fs.writeFileSync(path.join(SHOTS, 'var' + k + '-' + phase + '.png'), encodePNG(W, H, d));
+  }
+console.log('ok variants A/B/C');
