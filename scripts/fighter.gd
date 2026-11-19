@@ -18,8 +18,13 @@ const Z_ATK_HOLD := 0.55
 # Удар зомби — три такта, как в принципах анимации: замах -> удар -> отход.
 # Только кадры, где ноги на земле: из набора убраны jump/jumpkick, иначе зомби
 # «подпрыгивает» в момент удара (замечание Кирилла 20.11).
-const Z_ATK_FRAMES: Array[String] = ["punch2_0", "punch2_0", "punch2_1", "punch2_1", "falling"]
-const Z_READY_FRAME := "punch2_0"   # поза замаха: когти подняты, корпус отведён
+# Свои кадры зомби (tools/draw_zombie.ps1): шаркающая походка и удар сверху.
+# Сделаны параметрически, чтобы силуэт читался как зомби, а не как человек.
+# стойка зомби своя, чтобы при остановке не мигали кадры пака другой пропорции
+const Z_IDLE_FRAMES: Array[String] = ["z_idle"]
+const Z_WALK_FRAMES: Array[String] = ["z_walk_0", "z_walk_1", "z_walk_2", "z_walk_3", "z_walk_4", "z_walk_5"]
+const Z_ATK_FRAMES: Array[String] = ["z_atk_1", "z_atk_2", "z_atk_2", "z_atk_3", "z_atk_4"]
+const Z_READY_FRAME := "z_atk_0"   # замах: когти над головой, пасть раскрыта
 const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px
@@ -93,9 +98,15 @@ func _build_frames() -> SpriteFrames:
 		if i == 1 or i == 2:
 			continue
 		walking.append("walk_%d" % i)
-	_add(sf, "idle", ["idle"], 4.0, true)
-	# у зомби шаг вдвое медленнее: тянет ноги, а не марширует как герой
-	_add(sf, "walk", walking, Z_WALK_FPS if is_enemy else 12.0, true)
+	if is_enemy:
+		_add(sf, "idle", Z_IDLE_FRAMES, 4.0, true)
+	else:
+		_add(sf, "idle", ["idle"], 4.0, true)
+	# у зомби своя шаркающая походка (6 кадров), у героя — кадры пака
+	if is_enemy:
+		_add(sf, "walk", Z_WALK_FRAMES, Z_WALK_FPS, true)
+	else:
+		_add(sf, "walk", walking, 12.0, true)
 	if not is_enemy:
 		# медленнее и с двумя проходами по кадрам: успевает читаться кадр с вытянутой рукой
 		_add(sf, "punch1", ["punch1_0", "punch1_1", "punch1_1", "punch1_1"], 10.0, false)
@@ -210,7 +221,7 @@ func _process(delta: float) -> void:
 		if is_enemy and state == "walk":
 			shamble_t += delta
 			body.speed_scale = 0.55 + 0.45 * (1.0 + sin(shamble_t * 3.1)) * 0.5
-			sway = sin(shamble_t * 2.2) * 1.8 + float(facing) * 1.6
+			sway = sin(shamble_t * 2.2) * 2.2 + float(facing) * 1.8
 			if stagger <= 0.0 and randf() < 0.5 * delta:
 				stagger = randf_range(0.12, 0.30)
 			if stagger > 0.0:
@@ -218,6 +229,18 @@ func _process(delta: float) -> void:
 				body.speed_scale = 0.0
 		else:
 			body.speed_scale = 1.0
+		# Зомби сутулится и раскачивается: наклон вперёд + качание на каждом шаге.
+		# Поза из кадров пака человеческая, но за счёт наклона и раскачки силуэт
+		# читается как шарканье, а не как строевой шаг.
+		if is_enemy:
+			# в ударе наклон уже нарисован в кадрах (z_atk_*), поэтому там 0
+			if state == "z_atk" or state == "z_ready":
+				body.rotation = 0.0
+			else:
+				var rock := 4.0 * sin(shamble_t * 2.6) if state == "walk" else 0.0
+				body.rotation = deg_to_rad((6.0 + rock) * float(facing))
+		else:
+			body.rotation = 0.0
 	# рывок зомби вперёд: корпус уходит вперёд и возвращается (ноги остаются на земле)
 	var lunge := 0.0
 	if state == "z_atk":
