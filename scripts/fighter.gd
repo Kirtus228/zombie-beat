@@ -6,6 +6,9 @@ const Shadow := preload("res://scripts/shadow.gd")
 const FRAME_DIR := "res://assets/jampa/norm_"
 # свой герой по фото Кирилла: перекрашенные кадры пака (tools/recolor_hero.ps1)
 const HERO_DIR := "res://assets/hero/"
+# зомби: перекрашенные кадры пака (tools/recolor_zombie.ps1) — та же геометрия,
+# поэтому анимации и хитбоксы не меняются
+const ZOMBIE_DIR := "res://assets/zombie/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
@@ -59,6 +62,8 @@ func _ready() -> void:
 func _dir_for(sheet: String) -> String:
 	if sheet == "guy1" and ResourceLoader.exists(HERO_DIR + "idle.png"):
 		return HERO_DIR
+	if sheet == "guy2" and ResourceLoader.exists(ZOMBIE_DIR + "idle.png"):
+		return ZOMBIE_DIR
 	return FRAME_DIR + sheet
 
 func _build_frames() -> SpriteFrames:
