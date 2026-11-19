@@ -506,7 +506,8 @@ func _spawn_wave() -> void:
 
 func _spawn_one(slot: int) -> void:
 	var e: Node2D = Fighter.new()
-	e.configure(82.0 + float(slot) * 5.0, ZOMBIE_HP, ZOMBIE_DAMAGE, true)
+	# каждый второй зомби — с открытым мозгом (кадры assets/zombie_brain)
+	e.configure(82.0 + float(slot) * 5.0, ZOMBIE_HP, ZOMBIE_DAMAGE, true, slot % 2 == 0)
 	e.atk_cooldown = ZOMBIE_ATK_CD
 	# Спавн строго за кадром с противоположной стороны: враг входит в кадр
 	# целиком и пешком идёт к герою. Раньше он появлялся посреди улицы.
