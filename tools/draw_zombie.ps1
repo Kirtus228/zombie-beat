@@ -89,20 +89,15 @@ function Shoe($gr, [double]$ax, [double]$ay, [double]$dir) {
 # Нога: бедро (в шортах) + голень + ступня
 function DrawLeg($gr, [double]$hx, [double]$hy, [double]$kx, [double]$ky, [double]$ax, [double]$ay, [double]$shortsT, $skinCol) {
   $legPts = [System.Drawing.PointF[]]@((Pnt $hx $hy), (Pnt $kx $ky), (Pnt $ax $ay))
-  $legRr = [double[]]@(8.0, 5.5, 4.0)
+  $legRr = [double[]]@(6.0, 4.8, 3.6)
   Limb $gr $legPts $legRr $skinCol
-  $mx = $hx + ($kx - $hx) * $shortsT
-  $my = $hy + ($ky - $hy) * $shortsT
-  $shPts = [System.Drawing.PointF[]]@((Pnt $hx $hy), (Pnt $mx $my))
-  $shRr = [double[]]@(11.0, 9.0)
-  Limb $gr $shPts $shRr $P_SHORT
   Shoe $gr $ax $ay 1.0
 }
 
 # Рука: плечо-локоть-кисть + коготь
 function DrawArm($gr, [double]$sx, [double]$sy, [double]$ex, [double]$ey, [double]$wx, [double]$wy, [double]$ang, [double]$grip, $skinCol) {
   $armPts = [System.Drawing.PointF[]]@((Pnt $sx $sy), (Pnt $ex $ey), (Pnt $wx $wy))
-  $armRr = [double[]]@(6.5, 5.0, 3.8)
+  $armRr = [double[]]@(5.2, 4.4, 3.4)
   Limb $gr $armPts $armRr $skinCol
   Claw $gr $wx $wy $ang 0.46 $grip
 }
@@ -112,48 +107,54 @@ function DrawArm($gr, [double]$sx, [double]$sy, [double]$ex, [double]$ey, [doubl
 function DrawHead($gr, [double]$hx, [double]$hy, [double]$tilt, [double]$jaw) {
   $gr.TranslateTransform([float]$hx, [float]$hy)
   $gr.RotateTransform([float]$tilt)
-  # череп + челюсть
-  FillEll $gr 0 1 14.0 15.0 $P_SKIN 2.6
-  FillEll $gr 2.0 11.0 9.5 5.0 $P_SKIN 2.4
-  # волосы куполом (по ним brainify4 находит макушку)
-  FillEll $gr -1.0 -11.5 13.0 6.0 $P_HAIR 2.2
-  # глазницы: тёмная впадина + белок
-  FillEll $gr 5.0 -2.0 3.4 3.0 $P_SKIND 0
-  FillEll $gr 5.0 -2.2 2.4 2.1 $P_EYE 1.2
-  FillEll $gr 6.0 -2.0 1.1 1.2 $P_INK 0
-  FillEll $gr -2.0 -2.6 3.0 2.8 $P_SKIND 0
-  FillEll $gr -1.6 -2.8 2.1 1.9 $P_EYE 1.2
-  FillEll $gr -0.8 -2.6 1.0 1.1 $P_INK 0
-  # пасть: тёмный клин, сверху зубы
-  $h = 3.0 + 5.0 * $jaw
+  # череп 24x36 как у пака: узкий и высокий
+  FillEll $gr 0 0 12.0 17.5 $P_SKIN 2.6
+  # волосы: купол сверху и затылок слева
+  FillEll $gr -1.0 -11.0 11.5 7.5 $P_HAIR 2.2
+  FillEll $gr -7.5 -3.0 4.5 6.0 $P_HAIR 2.0
+  # глаз: белок + зрачок (у пака глаз один, справа)
+  FillEll $gr 5.0 -3.0 3.0 2.6 $P_EYE 1.3
+  FillEll $gr 6.0 -2.8 1.2 1.3 $P_INK 0
+  FillEll $gr -2.0 -3.4 2.2 2.0 $P_SKIND 0
+  # пасть у самого низа лица: тёмный клин + квадратные зубы
+  $h = 4.0 + 5.0 * $jaw
   $mp = [System.Drawing.PointF[]]@(
-    (Pnt 0.0 ($h*0.60)), (Pnt 9.5 ($h*0.45)), (Pnt 8.8 ($h*1.05)), (Pnt 0.5 ($h*1.15)))
+    (Pnt -1.0 (6.0)), (Pnt 9.5 (5.0)), (Pnt 9.0 (6.0 + $h)), (Pnt -0.5 (6.5 + $h)))
   FillPoly $gr $mp $P_MOUTH 1.7
   $tb = [System.Drawing.SolidBrush]::new($P_TEETH)
-  for ($i = 0; $i -lt 3; $i++) {
-    $gr.FillRectangle($tb, [float](1.0 + $i*2.9), [float]($h*0.52), [float]2.0, [float]2.4)
+  for ($i = 0; $i -lt 4; $i++) {
+    $gr.FillRectangle($tb, [float](0.0 + $i*2.6), [float](6.2), [float]1.9, [float]2.3)
+    $gr.FillRectangle($tb, [float](0.6 + $i*2.6), [float](6.0 + $h - 2.0), [float]1.7, [float]1.8)
   }
   $tb.Dispose()
   # нос
-  $np = [System.Drawing.PointF[]]@((Pnt 11.0 -1.5),(Pnt 16.0 1.6),(Pnt 11.0 2.4))
+  $np = [System.Drawing.PointF[]]@((Pnt 11.0 -1.0),(Pnt 14.5 1.8),(Pnt 11.0 2.6))
   FillPoly $gr $np $P_SKIND 1.4
   $gr.ResetTransform()
 }
 
 # Тело: таз -> плечи (майка), шея
 function DrawTorso($gr, [double]$hx, [double]$hy, [double]$nx, [double]$ny) {
+  # майка: плечи 34 px, к поясу уже
   $tp = [System.Drawing.PointF[]]@(
-    (Pnt ($nx - 18) ($ny + 2)), (Pnt ($nx + 18) ($ny + 2)),
-    (Pnt ($hx + 14) ($hy + 2)), (Pnt ($hx - 14) ($hy + 2)))
+    (Pnt ($nx - 17) ($ny + 2)), (Pnt ($nx + 17) ($ny + 2)),
+    (Pnt ($hx + 15) ($hy + 2)), (Pnt ($hx - 15) ($hy + 2)))
   FillPoly $gr $tp $P_TANK 2.6
-  # пояс шорт — один блок на тазу, штанины дорисовываются по бедру
-  $sp = [System.Drawing.PointF[]]@(
-    (Pnt ($hx - 16) ($hy - 4)), (Pnt ($hx + 16) ($hy - 4)),
-    (Pnt ($hx + 17) ($hy + 12)), (Pnt ($hx - 17) ($hy + 12)))
-  FillPoly $gr $sp $P_SHORT 2.4
-  $neckPts = [System.Drawing.PointF[]]@((Pnt $nx ($ny + 3)), (Pnt $nx ($ny - 10)))
-  $neckRr = [double[]]@(7.5, 6.5)
+  # шея
+  $neckPts = [System.Drawing.PointF[]]@((Pnt $nx ($ny + 3)), (Pnt $nx ($ny - 8)))
+  $neckRr = [double[]]@(6.5, 5.5)
   Limb $gr $neckPts $neckRr $P_SKIN
+}
+
+# Шорты: один блок на оба бедра (в паке это цельная деталь, а не штанины)
+function DrawShorts($gr, [double]$hx, [double]$hy) {
+  $sp = [System.Drawing.PointF[]]@(
+    (Pnt ($hx - 16) ($hy - 6)), (Pnt ($hx + 16) ($hy - 6)),
+    (Pnt ($hx + 17) ($hy + 17)), (Pnt ($hx + 1) ($hy + 19)),
+    (Pnt ($hx - 17) ($hy + 17)))
+  FillPoly $gr $sp $P_SHORT 2.4
+  $hem = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255,124,134,96), 2.0)
+  $gr.DrawLine($hem, [float]($hx-14), [float]($hy+15), [float]($hx+14), [float]($hy+15)); $hem.Dispose()
 }
 
 # Сборка одного кадра по скелету
@@ -166,8 +167,9 @@ function Render($name, $sk) {
   # дальняя сторона — темнее, потом торс, потом ближняя
   DrawLeg $gr $sk.hipFx $sk.hipFy $sk.kneeFx $sk.kneeFy $sk.ankFx $sk.ankFy 0.55 $P_SKIND
   DrawArm $gr $sk.shFx $sk.shFy $sk.elbFx $sk.elbFy $sk.wrFx $sk.wrFy $sk.wrFAng 0.95 $P_SKIND
-  DrawTorso $gr $sk.hipX $sk.hipY $sk.neckX $sk.neckY
   DrawLeg $gr $sk.hipNx $sk.hipNy $sk.kneeNx $sk.kneeNy $sk.ankNx $sk.ankNy 0.55 $P_SKIN
+  DrawShorts $gr $sk.hipX $sk.hipY
+  DrawTorso $gr $sk.hipX $sk.hipY $sk.neckX $sk.neckY
   DrawArm $gr $sk.shNx $sk.shNy $sk.elbNx $sk.elbNy $sk.wrNx $sk.wrNy $sk.wrNAng 1.05 $P_SKIN
   DrawHead $gr $sk.headX $sk.headY $sk.headTilt $sk.jaw
 
@@ -280,7 +282,7 @@ function IdlePose {
   $ny = $hipY - 58.0
   $sk = @{}
   $sk.hipX = $hipX; $sk.hipY = $hipY; $sk.neckX = $nx; $sk.neckY = $ny
-  $sk.headX = $nx + 4.0; $sk.headY = $ny - 26.0 + 2.0; $sk.headTilt = $lean * 0.45; $sk.jaw = 0.25
+  $sk.headX = $nx + 4.0; $sk.headY = $ny - 30.0 + 2.0; $sk.headTilt = $lean * 0.45; $sk.jaw = 0.25
   $sk.hipNx = $hipX + 6; $sk.hipNy = $hipY + 4
   $sk.kneeNx = $hipX + 9; $sk.kneeNy = 188
   $sk.ankNx = $hipX + 12; $sk.ankNy = 212
