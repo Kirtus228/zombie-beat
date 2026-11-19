@@ -77,8 +77,12 @@ func _ready() -> void:
 	body.sprite_frames = _build_frames()
 	body.scale = Vector2(SPRITE_SCALE, SPRITE_SCALE)
 	body.centered = true
-	body.offset = Vector2(0, 0)
-	body.position = Vector2(0, -CELL_FEET * SPRITE_SCALE)
+	# Точка вращения — СТУПНИ, а не центр кадра: иначе при наклоне корпуса
+	# (сутулость, замах, свал в ударе) ноги уезжали с линии земли и зомби
+	# выглядел так, будто бьёт в воздухе / подпрыгивает (замечание Кирилла 21.11).
+	# Смещение offset поднимает текстуру так же, как раньше, но крутим вокруг ног.
+	body.offset = Vector2(0, -CELL_FEET * SPRITE_SCALE)
+	body.position = Vector2.ZERO
 	add_child(body)
 	_sync()
 
@@ -261,7 +265,7 @@ func _process(delta: float) -> void:
 			lunge = Z_LUNGE * (1.0 - smoothstep(reach, 1.0, k))
 		lunge *= float(facing)
 	if body:
-		body.position = Vector2(lunge + sway, -CELL_FEET * SPRITE_SCALE - lift)
+		body.position = Vector2(lunge + sway, -lift)
 	if state == "z_atk":
 		if t > Z_ATK_HOLD:
 			set_state("idle")
