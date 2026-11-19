@@ -1,10 +1,8 @@
 
-// Кадры удара зомби «рукой сверху вниз» на кадрах пака.
-// Приём: НЕ стираем руку целиком — у пака нет кадра с опущенной рукой, но есть
-// кадры, где кисть висит в воздухе (punch1_0 — рука поднята) и где кисть перед
-// грудью (punch2_1). Стираем только КИСТЬ (маленькая область), дорисовываем
-// предплечье по нужной дуге и раскрытую когтистую ладонь.
-// Тело, голова, шорты, ноги остаются паком.
+// Риг руки зомби: тело и ноги — кадр пака idle целиком, НИЧЕГО не заливаем.
+// Стирается только поднятая рука пака правее плеча (она в воздухе, за ней фон),
+// и на её месте рисуется своя рука в нужной фазе: вверх -> вниз.
+// Вторая рука (у груди) остаётся паковской — зомби и так стоит с одной рукой у груди.
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import path from 'node:path';
@@ -14,6 +12,11 @@ const SRC = path.join(ROOT, 'assets/zombie');
 const SHOTS = path.join(ROOT, 'shots');
 
 const SKIN = [152, 182, 138], INK = [34, 36, 30], NAIL = [188, 202, 176];
+const SHOULDER = { x: 162, y: 106 };
+const ERASE = { x0: 164, x1: 210, y0: 80, y1: 132 };
+// отдельный «остаток» паковского предплечья ниже плеча: сам он не нужен,
+// потому что руку рисуем свою
+const ERASE_FLAP = { x0: 157, x1: 168, y0: 108, y1: 134 };
 
 function decodePNG(file) {
   const buf = fs.readFileSync(file);
@@ -63,38 +66,19 @@ function encodePNG(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
-const SRC_FRAMES = { wind: 'punch1_0', go: 'punch2_1', back: 'punch2_1' };
-const ref = decodePNG(path.join(SRC, 'punch2_1.png'));
-const W = ref.w, H = ref.h;
+const idle = decodePNG(path.join(SRC, 'idle.png'));
+const W = idle.w, H = idle.h;
 
-// стираем только область кисти и заливаем вдоль строки (майка плоская)
-function eraseHand(d, box) {
-  for (let y = box.y0; y <= box.y1; y++)
-    for (let x = box.x0; x <= box.x1; x++) {
-      const i = (y * W + x) * 4;
-      if (d[i + 3] > 40) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; }
-    }
-  for (let y = box.y0; y <= box.y1; y++)
-    for (let x = box.x0; x <= box.x1; x++) {
-      const i = (y * W + x) * 4;
-      if (d[i + 3] > 40) continue;
-      let col = null;
-      for (let step = 1; step < 40 && !col; step++) {
-        for (const nx of [x - step, x + step]) {
-          if (nx < 0 || nx >= W) continue;
-          const ni = (y * W + nx) * 4;
-          if (d[ni + 3] < 40) continue;
-          const c = [d[ni], d[ni + 1], d[ni + 2]];
-          if (c[0] < 70 && c[1] < 70 && c[2] < 70) continue;
-          col = c; break;
-        }
+function build(chain, hand) {
+  const d = new Uint8Array(idle.data);
+  // стираем только руку пака правее плеча — за ней фон, торс не задет
+  const boxes = [ERASE, ERASE_FLAP];
+  for (const b of boxes)
+    for (let y = b.y0; y <= b.y1; y++)
+      for (let x = b.x0; x <= b.x1; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
       }
-      if (!col) continue;
-      d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
-    }
-}
-
-function paint(d) {
   const M = new Uint8Array(W * H);
   const mark = (cx, cy, rx, ry) => {
     for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
@@ -117,69 +101,61 @@ function paint(d) {
     const i = (y * W + x) * 4;
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   };
-  // ладонь + четыре пальца веером + большой палец, когти светлее кожи
-  const hand = (wrist, angDeg, spreadDeg, len, palmR) => {
-    mark(wrist.x, wrist.y, palmR + 0.8, palmR + 1.3);
-    const a0 = angDeg * Math.PI / 180, sp = spreadDeg * Math.PI / 180;
-    const tips = [];
-    for (let k = -2; k <= 1; k++) {
-      const ang = a0 + (k / 1.6) * sp;
-      const bx = wrist.x + Math.cos(ang) * palmR * 0.6, by = wrist.y + Math.sin(ang) * palmR * 0.6;
-      const tx = wrist.x + Math.cos(ang) * len, ty = wrist.y + Math.sin(ang) * len;
-      tips.push({ x: tx, y: ty });
-      capsule(bx, by, tx, ty, 3.4, 2.2);
+  // плечо: круг, который перекрывает паковское плечо и стыкуется с торсом
+  mark(SHOULDER.x, SHOULDER.y, 7.0, 8.0);
+  for (let i = 0; i < chain.length - 1; i++) {
+    const a = chain[i], b = chain[i + 1];
+    capsule(a.x, a.y, b.x, b.y, a.r, b.r);
+  }
+  // кисть
+  const wrist = chain[chain.length - 1];
+  mark(wrist.x, wrist.y, hand.palm + 0.8, hand.palm + 1.3);
+  const a0 = hand.ang * Math.PI / 180, sp = hand.spread * Math.PI / 180;
+  const tips = [];
+  for (let k = -2; k <= 1; k++) {
+    const ang = a0 + (k / 1.6) * sp;
+    const bx = wrist.x + Math.cos(ang) * hand.palm * 0.6, by = wrist.y + Math.sin(ang) * hand.palm * 0.6;
+    const tx = wrist.x + Math.cos(ang) * hand.len, ty = wrist.y + Math.sin(ang) * hand.len;
+    tips.push({ x: tx, y: ty });
+    capsule(bx, by, tx, ty, 3.4, 2.2);
+  }
+  const th = a0 + sp * 2.1;
+  capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * hand.len * 0.58, wrist.y + Math.sin(th) * hand.len * 0.58, 3.2, 2.2);
+  // контур только по границе с фоном
+  const opaque = (x, y) => d[(y * W + x) * 4 + 3] > 40;
+  const ink = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!M[y * W + x]) continue;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          if (!M[ny * W + nx] && !opaque(nx, ny)) ink[ny * W + nx] = 1;
+        }
     }
-    const th = a0 + sp * 2.1;
-    capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * len * 0.58, wrist.y + Math.sin(th) * len * 0.58, 3.2, 2.2);
-    return tips;
-  };
-  const finish = () => {
-    const opaque = (x, y) => d[(y * W + x) * 4 + 3] > 40;
-    const ink = new Uint8Array(W * H);
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        if (!M[y * W + x]) continue;
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx, ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-            if (!M[ny * W + nx] && !opaque(nx, ny)) ink[ny * W + nx] = 1;
-          }
-      }
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ink[y * W + x]) put(x, y, INK);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (M[y * W + x]) put(x, y, SKIN);
-  };
-  return { mark, capsule, put, hand, finish };
-}
-
-// --- кадры ---
-// 1) замах: рука поднята выше головы. База punch1_0 — там кисть уже в воздухе.
-function frameWind() {
-  const d = new Uint8Array(decodePNG(path.join(SRC, SRC_FRAMES.wind + '.png')).data);
-  eraseHand(d, { x0: 138, y0: 78, x1: 162, y1: 106 });
-  const p = paint(d);
-  p.capsule(147, 104, 151, 84, 5.6, 4.8);      // предплечье вверх
-  p.mark(148, 100, 6.0, 6.5);                  // плечо/локоть чуть полнее
-  const tips = p.hand({ x: 152, y: 82 }, -86, 30, 12, 4.0);
-  p.finish();
-  for (const t of tips) p.put(t.x, t.y, NAIL);
-  return d;
-}
-// 2) удар: рука опущена вниз-вперёд. База punch2_1 — кисть перед грудью.
-function frameDown(low) {
-  const d = new Uint8Array(decodePNG(path.join(SRC, SRC_FRAMES.go + '.png')).data);
-  eraseHand(d, { x0: 166, y0: 86, x1: 194, y1: 120 });
-  const p = paint(d);
-  const wrist = low ? { x: 186, y: 132 } : { x: 184, y: 122 };
-  const elbow = low ? { x: 170, y: 116 } : { x: 168, y: 110 };
-  p.capsule(elbow.x, elbow.y, wrist.x, wrist.y, 5.6, 4.8);
-  p.mark(elbow.x, elbow.y, 5.6, 6.0);
-  const tips = p.hand(wrist, low ? 74 : 52, 30, 11, 3.8);
-  p.finish();
-  for (const t of tips) p.put(t.x, t.y, NAIL);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ink[y * W + x]) put(x, y, INK);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (M[y * W + x]) put(x, y, SKIN);
+  for (const t of tips) put(t.x, t.y, NAIL);
   return d;
 }
 
-const frames = { claw_wind: frameWind(), claw_go: frameDown(false), claw_back: frameDown(true) };
-for (const [name, d] of Object.entries(frames)) fs.writeFileSync(path.join(SHOTS, 'rig-' + name + '.png'), encodePNG(W, H, d));
-console.log('ok 3 frames -> shots/rig-claw_*.png');
+// 1) замах: рука вскинута над головой, когти раскрыты
+const wind = build(
+  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 168, y: 86, r: 6.0 }, { x: 177, y: 66, r: 5.0 }],
+  { ang: -80, spread: 30, len: 13, palm: 4.4 },
+);
+// 2) удар: рука проходит вниз-вперёд, когти у корпуса героя
+const go = build(
+  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 181, y: 112, r: 6.0 }, { x: 195, y: 121, r: 5.0 }],
+  { ang: 20, spread: 32, len: 12, palm: 4.4 },
+);
+// 3) проводка: когти уходят вниз
+const back = build(
+  [{ x: SHOULDER.x, y: SHOULDER.y, r: 7.4 }, { x: 176, y: 129, r: 6.0 }, { x: 182, y: 145, r: 5.0 }],
+  { ang: 72, spread: 30, len: 11, palm: 4.2 },
+);
+
+for (const [n, d] of [['wind', wind], ['go', go], ['back', back]])
+  fs.writeFileSync(path.join(SHOTS, 'rig-' + n + '.png'), encodePNG(W, H, d));
+console.log('ok rig-wind/go/back');
