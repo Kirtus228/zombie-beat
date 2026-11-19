@@ -64,7 +64,10 @@ foreach ($f in $files) {
   for ($y = 0; $y -lt $h; $y++) {
     for ($x = 0; $x -lt $w; $x++) {
       $c = $img.GetPixel($x, $y)
-      if ($c.A -lt 40 -or $y -gt $brainBottom) { $out.SetPixel($x, $y, $c); continue }
+      # срез не строго горизонтом: на 1 px волнистый, иначе край выглядит как ободок шапки
+      $colB = $brainBottom
+      if ([math]::Sin($x * 0.55 + 1.3) -gt 0.35) { $colB = $brainBottom - 1 }
+      if ($c.A -lt 40 -or $y -gt $colB) { $out.SetPixel($x, $y, $c); continue }
       # собственный контур модельки не трогаем — мозг остаётся внутри черепа, а не поверх него
       $onStroke = $false
       foreach ($s in @(@(1, 0), @(-1, 0), @(0, 1), @(0, -1))) {
@@ -74,7 +77,7 @@ foreach ($f in $files) {
       }
       if ($onStroke) { $out.SetPixel($x, $y, $c); continue }
       # тень от мозга на лбу — срез не «приклеен», а лежит на голове
-      if ($y -eq $brainBottom) {
+      if ($y -eq $colB) {
         $sh = [System.Drawing.Color]::FromArgb($c.A, [int]($c.R * 0.72), [int]($c.G * 0.72), [int]($c.B * 0.72))
         $out.SetPixel($x, $y, $sh); continue
       }
@@ -84,7 +87,7 @@ foreach ($f in $files) {
       elseif ($fld -gt 0.45) { $n = $BRAIN2 }                                # гребень извилины
       else { $n = $BRAIN }                                                   # тело извилины
       # у самого среза мозг уходит в тень: тон на шаг темнее, чтобы не было светлой каймы
-      if ($y -ge $brainBottom - 3) {
+      if ($y -ge $colB - 3) {
         if ($n -eq $BRAIN2) { $n = $BRAIN } elseif ($n -eq $BRAIN) { $n = $BRAIN1 }
       }
       $out.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($c.A, $n.R, $n.G, $n.B))
