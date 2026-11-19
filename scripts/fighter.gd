@@ -9,8 +9,6 @@ const HERO_DIR := "res://assets/hero/"
 # зомби: перекрашенные кадры пака (tools/recolor_zombie.ps1) — та же геометрия,
 # поэтому анимации и хитбоксы не меняются
 const ZOMBIE_DIR := "res://assets/zombie/"
-# каждый второй зомби — «с открытым мозгом» (tools/brainify_zombie.ps1)
-const ZOMBIE_BRAIN_DIR := "res://assets/zombie_brain/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
@@ -66,8 +64,6 @@ func _dir_for(sheet: String) -> String:
 		return HERO_DIR
 	if sheet == "guy2" and ResourceLoader.exists(ZOMBIE_DIR + "idle.png"):
 		return ZOMBIE_DIR
-	if sheet == "guy3" and ResourceLoader.exists(ZOMBIE_BRAIN_DIR + "idle.png"):
-		return ZOMBIE_BRAIN_DIR
 	return FRAME_DIR + sheet
 
 func _build_frames() -> SpriteFrames:
@@ -107,13 +103,13 @@ func _add(sf: SpriteFrames, anim: String, files: Array[String], fps: float, loop
 		if tex:
 			sf.add_frame(anim, tex)
 
-func configure(sp: float, mhp: int, dmg: int, enemy: bool, brain := false) -> void:
+func configure(sp: float, mhp: int, dmg: int, enemy: bool) -> void:
 	speed = sp
 	max_hp = mhp
 	hp = mhp
 	damage = dmg
 	is_enemy = enemy
-	sheet_name = "guy3" if brain else ("guy2" if enemy else "guy1")
+	sheet_name = "guy2" if enemy else "guy1"
 	frames_dir = _dir_for(sheet_name)
 	if body:
 		body.sprite_frames = _build_frames()
