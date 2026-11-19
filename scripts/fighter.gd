@@ -196,6 +196,8 @@ func try_attack() -> bool:
 	if dead or attack_cd > 0.0:
 		return false
 	attack_cd = atk_cooldown
+	# зомби на замахе рычит, герой — свистит кулаком
+	Sfx.play_var("z_attack" if is_enemy else "swing", -2.0 if is_enemy else 0.0, 0.08)
 	set_state("punch1" if randf() < 0.5 else "punch2")
 	t = 0.0
 	return true
@@ -206,6 +208,10 @@ func take_hit(dmg: int, from_dir: int) -> void:
 		return
 	hp -= dmg
 	invuln = 0.5
+	if is_enemy:
+		Sfx.play_var("z_hurt", -2.0, 0.1)
+	else:
+		Sfx.play_var("player_hurt", 0.0, 0.06)
 	position.x += float(from_dir) * 16.0
 	combo += 1
 	combo_timer = COMBO_WINDOW
@@ -215,6 +221,8 @@ func take_hit(dmg: int, from_dir: int) -> void:
 		# HP кончились — падает окончательно и уходит из боя
 		hp = 0
 		dead = true
+		if is_enemy:
+			Sfx.play_var("z_death", 0.0, 0.08)
 		set_state("down")
 		z_index = 1
 		return

@@ -66,6 +66,7 @@ var attacker: Node2D = null
 var pending_spawn := 0
 var wave_slot := 0
 var strike_lock := 0.0
+var groan_timer := 2.5   # когда следующий стон из толпы
 var max_hit_d := 0.0 # диагностика: с какой дистанции прошёл последний удар игрока
 var last_hit_n := 0  # диагностика: сколько целей задел последний удар
 var attacks := 0     # диагностика: сколько ударов сделал герой
@@ -228,6 +229,7 @@ func _process(delta: float) -> void:
 	if demo:
 		_demo_ai(delta)
 	_update_enemies(delta)
+	_update_groans(delta)
 	_cleanup_enemies()
 	_update_waves(delta)
 	_update_hud()
@@ -311,6 +313,7 @@ func _resolve_player_hit() -> void:
 	)
 	var n: int = mini(MAX_HIT_TARGETS, targets.size())
 	last_hit_n = n
+	Sfx.play_var("hit", 0.0, 0.07)
 	for i in range(n):
 		var e: Node2D = targets[i]
 		var dx2: float = e.position.x - player.position.x
@@ -318,6 +321,17 @@ func _resolve_player_hit() -> void:
 		max_hit_d = maxf(max_hit_d, absf(dx2))
 		_spawn_fx(e.position)
 		e.take_hit(player.damage, int(signf(dx2)) if dx2 != 0.0 else player.facing)
+
+# Живая толпа: раз в несколько секунд кто-то из зомби стонет.
+func _update_groans(delta: float) -> void:
+	groan_timer -= delta
+	if groan_timer > 0.0:
+		return
+	groan_timer = randf_range(2.5, 6.0)
+	for e in enemies:
+		if not e.dead:
+			Sfx.play_var("z_groan", -5.0, 0.14)
+			return
 
 func _update_enemies(delta: float) -> void:
 	if strike_lock > 0.0:
@@ -421,6 +435,7 @@ func _enemy_strike(e: Node2D) -> void:
 	attacker = e
 	strike_lock = STRIKE_GAP
 	_spawn_fx(player.position)
+	Sfx.play_var("hit", -2.0, 0.12)   # попадание по герою — глуше и ниже
 	player.take_hit(ZOMBIE_DAMAGE, int(signf(player.position.x - e.position.x)))
 
 func _slot_taken(slot: int, except: Node2D) -> bool:
