@@ -20,7 +20,7 @@ const PUNCH_HOLD := 0.34
 # Кулака в этой цепочке нет ни в одном кадре.
 # Сверху-вниз добавляет не только кадр: корпус отклоняется НАЗАД на замахе и
 # падает ВПЕРЁД на ударе (PITCH_*), поэтому рука идёт дугой сверху.
-const Z_ATK_FRAMES: Array[String] = ["punch2_1", "punch2_1", "claw_go", "claw_go", "claw_go", "punch2_1"]
+const Z_ATK_FRAMES: Array[String] = ["claw_wind", "claw_wind", "claw_go", "claw_go", "claw_go", "punch2_1"]
 const Z_CONTACT_FRAME := "claw_go"   # кадр, на котором когти достают цель
 const Z_ATK_FPS := 10.0
 const Z_ATK_HOLD := 0.6        # длина всей анимации удара, с
@@ -28,7 +28,7 @@ const Z_CONTACT_T := 0.2       # момент касания внутри уда
 const Z_LUNGE := 22.0          # рывок корпуса к цели, px
 const Z_PITCH_BACK := 8.0      # наклон назад на замахе, градусы
 const Z_PITCH_FRONT := 11.0    # свал вперёд на ударе, градусы
-const Z_READY_FRAME := "punch2_1"
+const Z_READY_FRAME := "claw_wind"
 const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px

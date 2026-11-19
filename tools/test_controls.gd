@@ -58,7 +58,7 @@ func _init() -> void:
 	ok(not airy, "в z_atk нет кадров прыжка (обе ноги на земле)")
 
 	# удар идёт сверху вниз: на замахе рука вверху, на касании — свал вниз
-	ok(String(enemy.Z_READY_FRAME) == "punch2_1", "замах — паковский замах с отведённой рукой")
+	ok(String(enemy.Z_READY_FRAME) == "claw_wind", "замах — рука заведена с раскрытыми когтями")
 	ok(ResourceLoader.exists("res://assets/zombie/claw_go.png"), "кадр с раскрытыми когтями есть")
 	ok(ResourceLoader.exists("res://assets/zombie_brain/claw_go.png"), "и у зомби с мозгом тоже")
 	ok(enemy.Z_CONTACT_T > 0.0 and enemy.Z_CONTACT_T < enemy.Z_ATK_HOLD, "касание внутри удара: %.2f < %.2f" % [enemy.Z_CONTACT_T, enemy.Z_ATK_HOLD])

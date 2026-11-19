@@ -13,9 +13,9 @@ function down(img, k) {
     }
   return { w, h, data: out };
 }
-const items = [['punch2_1', D], ['v-claw_go', S]];
-const CW = 150, CH = 135, X0 = 100, Y0 = 55, Z = 5, gap = 10;
-const dst = blank(gap + items.length * (CW * Z + gap), gap + CH * Z + gap + 190, [26, 26, 34]);
+const items = [['punch1_0', D], ['v-claw_wind', S], ['v-claw_go', S]];
+const CW = 145, CH = 150, X0 = 95, Y0 = 40, Z = 5, gap = 10;
+const dst = blank(gap + items.length * (CW * Z + gap), gap + CH * Z + gap + 180, [26, 26, 34]);
 items.forEach(([n, dir], i) => {
   const img = decodePNG(dir + n + '.png');
   blit(dst, img, gap + i * (CW * Z + gap), gap, Z, X0, Y0, CW, CH);
