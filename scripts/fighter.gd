@@ -21,10 +21,8 @@ const Z_ATK_HOLD := 0.55
 # Свои кадры зомби (tools/draw_zombie.ps1): шаркающая походка и удар сверху.
 # Сделаны параметрически, чтобы силуэт читался как зомби, а не как человек.
 # стойка зомби своя, чтобы при остановке не мигали кадры пака другой пропорции
-const Z_IDLE_FRAMES: Array[String] = ["z_idle"]
-const Z_WALK_FRAMES: Array[String] = ["z_walk_0", "z_walk_1", "z_walk_2", "z_walk_3", "z_walk_4", "z_walk_5"]
-const Z_ATK_FRAMES: Array[String] = ["z_atk_1", "z_atk_2", "z_atk_2", "z_atk_3", "z_atk_4"]
-const Z_READY_FRAME := "z_atk_0"   # замах: когти над головой, пасть раскрыта
+const Z_ATK_FRAMES: Array[String] = ["falling", "punch2_1", "punch2_1", "falling"]
+const Z_READY_FRAME := "punch2_0"
 const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px
@@ -98,15 +96,9 @@ func _build_frames() -> SpriteFrames:
 		if i == 1 or i == 2:
 			continue
 		walking.append("walk_%d" % i)
-	if is_enemy:
-		_add(sf, "idle", Z_IDLE_FRAMES, 4.0, true)
-	else:
-		_add(sf, "idle", ["idle"], 4.0, true)
-	# у зомби своя шаркающая походка (6 кадров), у героя — кадры пака
-	if is_enemy:
-		_add(sf, "walk", Z_WALK_FRAMES, Z_WALK_FPS, true)
-	else:
-		_add(sf, "walk", walking, 12.0, true)
+	_add(sf, "idle", ["idle"], 4.0, true)
+	# у зомби шаг заметно медленнее: тянет ноги
+	_add(sf, "walk", walking, Z_WALK_FPS if is_enemy else 12.0, true)
 	if not is_enemy:
 		# медленнее и с двумя проходами по кадрам: успевает читаться кадр с вытянутой рукой
 		_add(sf, "punch1", ["punch1_0", "punch1_1", "punch1_1", "punch1_1"], 10.0, false)
