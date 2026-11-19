@@ -14,7 +14,10 @@ const SHOTS = path.join(ROOT, 'shots');
 const SKIN = [152, 182, 138], INK = [34, 36, 30], NAIL = [196, 208, 184];
 const SH = { x: 163, y: 103 };
 const INK_PX = 2;
-const R_SHOULDER = 5.5, R_ELBOW = 5.0, R_WRIST = 4.2;
+// ВАЖНО: в паковском УДАРЕ рука толще, чем в походке — замер по punch2_2:
+// у плеча ~26 px, у локтя ~18, у кисти ~16; контур 2-3 px, кисть крупная ~18x28.
+// Берём наружные радиусы под это, иначе рука выглядит тоньше модели.
+const R_SHOULDER = 11.0, R_ELBOW = 9.5, R_WRIST = 8.0;
 
 function decodePNG(file) {
   const buf = fs.readFileSync(file);
@@ -91,7 +94,7 @@ function build(chain, hand) {
       mark(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r0 + (r1 - r0) * t, r0 + (r1 - r0) * t);
     }
   };
-  mark(SH.x, SH.y, R_SHOULDER + 0.5, R_SHOULDER + 1.0);
+  mark(SH.x, SH.y, R_SHOULDER, R_SHOULDER + 1.5);
   for (let i = 0; i < chain.length - 1; i++) {
     const a = chain[i], b = chain[i + 1];
     capsule(a.x, a.y, b.x, b.y, a.r, b.r);
@@ -105,10 +108,10 @@ function build(chain, hand) {
     const bx = wrist.x + Math.cos(ang) * (hand.palm - 1), by = wrist.y + Math.sin(ang) * (hand.palm - 1);
     const tx = wrist.x + Math.cos(ang) * hand.len, ty = wrist.y + Math.sin(ang) * hand.len;
     tips.push({ x: tx, y: ty });
-    capsule(bx, by, tx, ty, 2.4, 1.9);
+    capsule(bx, by, tx, ty, 5.2, 3.8);
   }
   const th = a0 + sp * 2.0;
-  capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * hand.len * 0.6, wrist.y + Math.sin(th) * hand.len * 0.62, 2.3, 1.9);
+  capsule(wrist.x, wrist.y, wrist.x + Math.cos(th) * hand.len * 0.62, wrist.y + Math.sin(th) * hand.len * 0.64, 5.0, 3.8);
 
   // контур 2 px внутри силуэта (только там, где силуэт выходит на фон)
   const inner = new Uint8Array(W * H);
@@ -130,21 +133,39 @@ function build(chain, hand) {
   };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (M[y * W + x]) put(x, y, INK);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (M[y * W + x] && !inner[y * W + x]) put(x, y, SKIN);
-  for (const t of tips) put(t.x, t.y, NAIL);
+
+  // прорези между пальцами (как трещины в кулаке пака) — иначе кисть
+  // читается сплошным блином и когтей не видно
+  const line = (x0, y0, x1, y1, col) => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (let s = 0; s <= n; s++) {
+      const t = s / n;
+      const x = Math.round(x0 + (x1 - x0) * t), y = Math.round(y0 + (y1 - y0) * t);
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      if (!M[y * W + x]) continue;
+      put(x, y, col);
+    }
+  };
+  for (let i = 0; i + 1 < tips.length; i++) {
+    const mx = (tips[i].x + tips[i + 1].x) / 2, my = (tips[i].y + tips[i + 1].y) / 2;
+    line(mx, my, wrist.x + (mx - wrist.x) * 0.22, wrist.y + (my - wrist.y) * 0.22, INK);
+  }
+  // когти: светлый кончик на конце каждого пальца
+  for (const t of tips) { put(t.x, t.y, NAIL); put(t.x - 0.6, t.y + 0.6, NAIL); }
   return d;
 }
 
 const wind = build(
-  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 171, y: 86, r: R_ELBOW }, { x: 174, y: 70, r: R_WRIST }],
-  { ang: -86, spread: 28, len: 11, palm: 4.4 },
+  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 169, y: 82, r: R_ELBOW }, { x: 171, y: 64, r: R_WRIST }],
+  { ang: -88, spread: 30, len: 18, palm: 10.0 },
 );
 const go = build(
-  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 180, y: 112, r: R_ELBOW }, { x: 193, y: 120, r: R_WRIST }],
-  { ang: 24, spread: 30, len: 11, palm: 4.6 },
+  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 181, y: 111, r: R_ELBOW }, { x: 192, y: 117, r: R_WRIST }],
+  { ang: 24, spread: 34, len: 18, palm: 10.5 },
 );
 const back = build(
-  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 176, y: 128, r: R_ELBOW }, { x: 182, y: 143, r: R_WRIST }],
-  { ang: 74, spread: 28, len: 10, palm: 4.2 },
+  [{ x: SH.x, y: SH.y, r: R_SHOULDER }, { x: 177, y: 127, r: R_ELBOW }, { x: 182, y: 140, r: R_WRIST }],
+  { ang: 74, spread: 32, len: 16, palm: 9.5 },
 );
 
 for (const [n, d] of [['claw_wind', wind], ['claw_go', go], ['claw_back', back]])
