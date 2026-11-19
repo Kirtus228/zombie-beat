@@ -58,13 +58,12 @@ func _init() -> void:
 	ok(not airy, "в z_atk нет кадров прыжка (обе ноги на земле)")
 
 	# удар идёт сверху вниз: на замахе рука вверху, на касании — свал вниз
-	ok(String(enemy.Z_READY_FRAME) == "claw_wind", "замах — рука заведена с раскрытыми когтями")
-	ok(ResourceLoader.exists("res://assets/zombie/claw_go.png"), "кадр с раскрытыми когтями есть")
-	ok(ResourceLoader.exists("res://assets/zombie_brain/claw_go.png"), "и у зомби с мозгом тоже")
+	ok(String(enemy.Z_READY_FRAME) == "punch1_0", "замах — рука поднята с раскрытыми когтями")
+	ok(String(enemy.Z_CONTACT_FRAME) == "walk_5", "удар заканчивается внизу: рука опущена")
 	ok(enemy.Z_CONTACT_T > 0.0 and enemy.Z_CONTACT_T < enemy.Z_ATK_HOLD, "касание внутри удара: %.2f < %.2f" % [enemy.Z_CONTACT_T, enemy.Z_ATK_HOLD])
 	var contact_idx := int(enemy.Z_CONTACT_T * enemy.Z_ATK_FPS)
 	ok(String(enemy.Z_ATK_FRAMES[contact_idx]) == String(enemy.Z_CONTACT_FRAME), "в момент касания в кадре свал вниз (кадр %d = %s)" % [contact_idx, enemy.Z_CONTACT_FRAME])
-	ok(enemy.Z_PITCH_FRONT > 0.0 and enemy.Z_PITCH_BACK > 0.0, "корпус откидывается назад и падает вперёд")
+	ok(enemy.Z_PITCH_BACK == 0.0 and enemy.Z_PITCH_FRONT > 0.0, "корпус назад не откидывается, только лёгкий свал вперёд")
 	# удар не мелькает: покадрово видно и замах, и касание
 	ok(enemy.Z_ATK_HOLD >= 0.5, "удар не мелькает: %.2f с" % enemy.Z_ATK_HOLD)
 	# шаг зомби медленнее человеческого

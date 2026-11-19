@@ -2,7 +2,7 @@
 import { decodePNG, save, blank, blit } from './pngtool.mjs';
 const CAPS = 'D:/OneDrive/Desktop/Mobidick/games/zombie-beat/caps/';
 const SHOTS = 'D:/OneDrive/Desktop/Mobidick/games/zombie-beat/shots/';
-const idx = [69, 71, 73, 74, 76, 78, 79, 80];
+const idx = [68, 70, 72, 73, 75, 77, 78, 79];
 const CW = 300, CH = 250, S = 2, X0 = 25, Y0 = 230;
 const cols = 4, gap = 6;
 const W = cols * CW * S + (cols + 1) * gap, H = 2 * CH * S + 3 * gap;
