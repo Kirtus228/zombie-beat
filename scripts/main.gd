@@ -83,6 +83,7 @@ func _ready() -> void:
 		if c is Node2D and c != world:
 			c.reparent(world)
 	_build_hud()
+	_start_music()
 	wave_timer = 1.5
 	if FileAccess.file_exists("res://capture.on"):
 		print("capture mode on")
@@ -93,6 +94,19 @@ func _ready() -> void:
 			f.close()
 		demo = not txt.contains("idle")
 		add_child(load("res://scripts/recorder.gd").new())
+
+# Трек свой (синтез, tools/make_music.mjs), лицензий и авторских прав нет.
+func _start_music() -> void:
+	var p := "res://assets/music/loop.ogg"
+	if not ResourceLoader.exists(p):
+		return
+	var stream: AudioStreamOggVorbis = load(p)
+	stream.loop = true
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.volume_db = -6.0
+	add_child(player)
+	player.play()
 
 func _build_street() -> void:
 	var bg := ColorRect.new()
