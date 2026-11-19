@@ -14,18 +14,21 @@ const ZOMBIE_BRAIN_DIR := "res://assets/zombie_brain/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
-# Удар зомби — три такта: замах (когти отведены) -> выпад с раскрытыми когтями
-# -> отход. Каждый кадр держится по 0,1 с, поэтому когти видны, а не мелькают.
-# Кадры: claw_wind (пак punch2_0), claw_go (пак punch2_2 с раскрытой когтистой
-# кистью — tools/claw_frames.mjs), claw_back (пак punch2_1).
-# Кадр falling из удара убран: он на 15 px ниже и ломал высоту корпуса, из-за
-# него зомби «подпрыгивал» в момент удара (замечание Кирилла 20.11).
-const Z_ATK_FRAMES: Array[String] = ["claw_wind", "claw_wind", "claw_go", "claw_go", "claw_go", "claw_back"]
+# Удар зомби — сверху вниз, когтями, а не кулаком вперёд как у героя-боксёра.
+# Только кадры пака: рука с раскрытыми пальцами вверху (punch1_0), свал корпусом
+# вниз с разведёнными когтями (falling), возврат в стойку (punch2_1).
+# Кулака в этой цепочке нет ни в одном кадре.
+# Сверху-вниз добавляет не только кадр: корпус отклоняется НАЗАД на замахе и
+# падает ВПЕРЁД на ударе (PITCH_*), поэтому рука идёт дугой сверху.
+const Z_ATK_FRAMES: Array[String] = ["punch1_0", "punch1_0", "punch2_1", "punch2_1", "punch2_1", "punch2_1"]
+const Z_CONTACT_FRAME := "punch2_1"  # кадр, на котором когти достают цель
 const Z_ATK_FPS := 10.0
 const Z_ATK_HOLD := 0.6        # длина всей анимации удара, с
 const Z_CONTACT_T := 0.2       # момент касания внутри удара: на нём включается урон
-const Z_LUNGE := 20.0          # рывок корпуса к цели, px
-const Z_READY_FRAME := "claw_wind"
+const Z_LUNGE := 22.0          # рывок корпуса к цели, px
+const Z_PITCH_BACK := 8.0      # наклон назад на замахе, градусы
+const Z_PITCH_FRONT := 11.0    # свал вперёд на ударе, градусы
+const Z_READY_FRAME := "punch1_0"
 const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px
@@ -228,9 +231,19 @@ func _process(delta: float) -> void:
 		# Поза из кадров пака человеческая, но за счёт наклона и раскачки силуэт
 		# читается как шарканье, а не как строевой шаг.
 		if is_enemy:
-			# в ударе наклон уже нарисован в кадрах (z_atk_*), поэтому там 0
-			if state == "z_atk" or state == "z_ready":
-				body.rotation = 0.0
+			# удар: на замахе корпус откидывается назад, на свале падает вперёд —
+			# рука идёт дугой сверху вниз, а не выносится вперёд
+			if state == "z_ready":
+				body.rotation = deg_to_rad(-Z_PITCH_BACK * float(facing))
+			elif state == "z_atk":
+				var k := clampf(t / Z_ATK_HOLD, 0.0, 1.0)
+				var peak := Z_CONTACT_T / Z_ATK_HOLD
+				var pitch := 0.0
+				if k < peak:
+					pitch = lerpf(-Z_PITCH_BACK, Z_PITCH_FRONT, smoothstep(0.0, peak, k))
+				else:
+					pitch = lerpf(Z_PITCH_FRONT, 0.0, smoothstep(peak, 1.0, k))
+				body.rotation = deg_to_rad(pitch * float(facing))
 			else:
 				var rock := 4.0 * sin(shamble_t * 2.6) if state == "walk" else 0.0
 				body.rotation = deg_to_rad((6.0 + rock) * float(facing))

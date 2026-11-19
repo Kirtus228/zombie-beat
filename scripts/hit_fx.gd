@@ -30,13 +30,14 @@ func _draw() -> void:
 	_spike(r, Color(tint.r, tint.g, tint.b, a))
 	_spike(r * 0.45, Color(1, 1, 1, a))
 	if slash != 0.0:
-		# три росчерка когтей поперёк искры: видно, чем именно достало
-		var len := 26.0 * (1.0 + 0.4 * (1.0 - k))
+		# три росчерка когтей СВЕРХУ ВНИЗ: видно, что это царапина, а не удар кулаком
+		var dir := Vector2(slash * 0.5, 1.0).normalized()
+		var perp := Vector2(-dir.y, dir.x) * signf(slash)
+		var l := 30.0 * (1.0 + 0.35 * (1.0 - k))
+		var c := Color(1.0, 0.97, 0.9, a * 0.9)
 		for i in range(3):
-			var off := float(i - 1) * 6.0
-			var dir := Vector2(slash, 0.7)
-			var c := Color(1.0, 0.97, 0.9, a * 0.9)
-			draw_line(Vector2(-dir.x * len * 0.5, off - dir.y * len * 0.25), Vector2(dir.x * len * 0.5, off + dir.y * len * 0.25), c, 1.5)
+			var off: Vector2 = perp * (float(i - 1) * 6.0)
+			draw_line(off - dir * l * 0.55, off + dir * l * 0.45, c, 1.5)
 
 func _spike(r: float, color: Color) -> void:
 	var pts := PackedVector2Array()
