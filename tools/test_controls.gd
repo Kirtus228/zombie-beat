@@ -49,6 +49,15 @@ func _init() -> void:
 	ok(esf.has_animation("z_atk"), "у зомби есть рывок z_atk")
 	ok(esf.get_frame_count("z_atk") >= 4, "z_atk из 4+ кадров: %d" % esf.get_frame_count("z_atk"))
 	ok(not esf.has_animation("punch1"), "человеческого прямого удара у зомби НЕТ")
+	ok(esf.has_animation("z_ready"), "у зомби есть видимый замах z_ready")
+	# в ударе зомби не должно быть кадров прыжка: иначе он «подпрыгивает» при ударе
+	var airy := false
+	for fr in enemy.Z_ATK_FRAMES:
+		if String(fr) == "jump" or String(fr) == "jumpkick":
+			airy = true
+	ok(not airy, "в z_atk нет кадров прыжка (ноги на земле)")
+	# шаг зомби медленнее человеческого
+	ok(esf.get_animation_speed("walk") < hsf.get_animation_speed("walk"), "шаг зомби медленнее героя: %.1f против %.1f" % [esf.get_animation_speed("walk"), hsf.get_animation_speed("walk")])
 
 	# 4) прыжок: в воздухе неуязвим, второй прыжок запрещён
 	ok(hero.jump(), "прыжок сработал")

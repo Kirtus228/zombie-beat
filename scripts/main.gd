@@ -360,6 +360,8 @@ func _update_enemies(delta: float) -> void:
 		# оглушённый или лежащий не идёт к своему месту и не бьёт; замах сорван
 		if e.stun > 0.0 or e.knocked:
 			e.set_meta("windup", 0.0)
+			if e.state == "z_ready" or e.state == "z_atk":
+				e.set_state("idle")
 			e.move_by(Vector2.ZERO)
 			continue
 		# замах: враг стоит на месте и готовится, а не напирает (#001)
@@ -437,20 +439,27 @@ func _update_enemies(delta: float) -> void:
 	# Не бьём сразу: даём герою окно уйти из зоны и запускаем замах.
 	var striker: Node2D = ready[0]
 	striker.set_meta("windup", randf_range(WINDUP_MIN, WINDUP_MAX))
+	# пока идёт пауза перед ударом, враг отводит когти: замах видно, а не «телепорт» в удар
+	striker.set_state("z_ready")
 	strike_lock = STRIKE_GAP
 
 # Удар в конце замаха: если герой успел выйти из зоны — это промах (#001).
 func _enemy_strike(e: Node2D) -> void:
+	# замах закончился: из позы замаха выходим всегда
+	if e.state == "z_ready":
+		e.set_state("idle")
 	if player.dead or e.dead or e.stun > 0.0 or e.knocked:
 		return
-	if player.invuln > 0.0:
-		return
-	if absf(player.position.x - e.position.x) > REACH_X or absf(player.position.y - e.position.y) > REACH_Y:
-		return
+	# Зомби ДОВОДИТ удар до конца, даже если герой увернулся: видно сам рывок и
+	# когти, а не «замах -> мгновенно стойка». Урон при этом не проходит.
 	if not e.try_attack():
 		return
 	attacker = e
 	strike_lock = STRIKE_GAP
+	if player.invuln > 0.0:
+		return
+	if absf(player.position.x - e.position.x) > REACH_X or absf(player.position.y - e.position.y) > REACH_Y:
+		return
 	_spawn_fx(player.position)
 	Sfx.play_var("hit", -2.0, 0.12)   # попадание по герою — глуше и ниже
 	player.take_hit(ZOMBIE_DAMAGE, int(signf(player.position.x - e.position.x)))

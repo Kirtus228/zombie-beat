@@ -14,7 +14,13 @@ const ZOMBIE_BRAIN_DIR := "res://assets/zombie_brain/"
 const SPRITE_SCALE := 0.62
 const CELL_FEET := 107.5 # от центра кадра до ступней, px
 const PUNCH_HOLD := 0.34
-const Z_ATK_HOLD := 0.55   # зомби бьёт не кулаком: сгорбился, кинулся, когти
+const Z_ATK_HOLD := 0.55
+# Удар зомби — три такта, как в принципах анимации: замах -> удар -> отход.
+# Только кадры, где ноги на земле: из набора убраны jump/jumpkick, иначе зомби
+# «подпрыгивает» в момент удара (замечание Кирилла 20.11).
+const Z_ATK_FRAMES: Array[String] = ["punch2_0", "punch2_0", "punch2_1", "punch2_1", "falling"]
+const Z_READY_FRAME := "punch2_0"   # поза замаха: когти подняты, корпус отведён
+const Z_WALK_FPS := 6.5             # походка зомби медленнее человеческой (у героя 12)
 const JUMP_TIME := 0.52    # прыжок: время в воздухе
 const JUMP_H := 58.0       # высота дуги прыжка, px
 # серия ударов: пять подряд роняют врага, недобитая серия оставляет оглушение
@@ -50,6 +56,8 @@ var knocked := false    # лежит после серии: не бьёт, ег�
 var knock_timer := 0.0
 var airborne := false   # в прыжке
 var air_t := 0.0
+var shamble_t := 0.0    # фаза походки зомби
+var stagger := 0.0      # запинка: шаг замирает на долю секунды
 
 func _ready() -> void:
 	shadow = Shadow.new()
@@ -86,7 +94,8 @@ func _build_frames() -> SpriteFrames:
 			continue
 		walking.append("walk_%d" % i)
 	_add(sf, "idle", ["idle"], 4.0, true)
-	_add(sf, "walk", walking, 12.0, true)
+	# у зомби шаг вдвое медленнее: тянет ноги, а не марширует как герой
+	_add(sf, "walk", walking, Z_WALK_FPS if is_enemy else 12.0, true)
 	if not is_enemy:
 		# медленнее и с двумя проходами по кадрам: успевает читаться кадр с вытянутой рукой
 		_add(sf, "punch1", ["punch1_0", "punch1_1", "punch1_1", "punch1_1"], 10.0, false)
@@ -100,7 +109,9 @@ func _build_frames() -> SpriteFrames:
 	# кинулся (jump), добил когтями (punch2_1). Анимаций с человеческим прямым
 	# кулаком у врага в наборе НЕТ вообще (punch1/punch2 собираются только герою).
 	if is_enemy:
-		_add(sf, "z_atk", ["falling", "jump", "jump", "punch2_1"], 9.0, false)
+		_add(sf, "z_atk", Z_ATK_FRAMES, 9.0, false)
+		# замах: враг видимо отводит когти назад, пока идёт пауза перед ударом
+		_add(sf, "z_ready", [Z_READY_FRAME], 1.0, false)
 	# «лежит на земле»: отдельный кадр (tools/make_down_frame.ps1). Если его нет —
 	# падаем на старый кадр падения, чтобы игра не осталась без позы
 	_add(sf, "down", ["down"], 1.0, false)
@@ -192,12 +203,27 @@ func _process(delta: float) -> void:
 			air_t = 0.0
 			if state == "jump" or state == "jumpkick":
 				set_state("idle")
-	# рывок зомби вперёд: корпус уходит на 16 px и возвращается
+	# походка зомби: шаг неровный (тянет одну ногу), корпус раскачивается,
+	# раз в пару секунд запинается и замирает. Это и отличает его от героя.
+	var sway := 0.0
+	if body:
+		if is_enemy and state == "walk":
+			shamble_t += delta
+			body.speed_scale = 0.55 + 0.45 * (1.0 + sin(shamble_t * 3.1)) * 0.5
+			sway = sin(shamble_t * 2.2) * 1.8 + float(facing) * 1.6
+			if stagger <= 0.0 and randf() < 0.5 * delta:
+				stagger = randf_range(0.12, 0.30)
+			if stagger > 0.0:
+				stagger -= delta
+				body.speed_scale = 0.0
+		else:
+			body.speed_scale = 1.0
+	# рывок зомби вперёд: корпус уходит вперёд и возвращается (ноги остаются на земле)
 	var lunge := 0.0
 	if state == "z_atk":
-		lunge = 16.0 * sin(PI * clampf(t / Z_ATK_HOLD, 0.0, 1.0)) * float(facing)
+		lunge = 10.0 * sin(PI * clampf(t / Z_ATK_HOLD, 0.0, 1.0)) * float(facing)
 	if body:
-		body.position = Vector2(lunge, -CELL_FEET * SPRITE_SCALE - lift)
+		body.position = Vector2(lunge + sway, -CELL_FEET * SPRITE_SCALE - lift)
 	if state == "z_atk":
 		if t > Z_ATK_HOLD:
 			set_state("idle")
