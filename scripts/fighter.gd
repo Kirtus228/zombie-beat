@@ -23,10 +23,10 @@ const PUNCH_HOLD := 0.34
 # Z_PITCH_FRONT и Z_PITCH_BACK держим в нуле.
 # Темп удара медленный намеренно: на 10 fps выпад проскакивал за один кадр,
 # и заметить его в бою было невозможно.
-const Z_ATK_FRAMES: Array[String] = ["punch1_0", "punch1_1", "punch1_1", "punch1_0"]
+const Z_ATK_FRAMES: Array[String] = ["punch1_0", "punch1_1", "punch1_0"]
 const Z_CONTACT_FRAME := "punch1_1"   # кадр, на котором рука достаёт цель
-const Z_ATK_FPS := 4.0        # 4 кадра по 0.25 с — выпад видно глазами
-const Z_ATK_HOLD := 1.0        # длина всей анимации удара, с
+const Z_ATK_FPS := 4.0        # 3 кадра по 0.25 с: выпад и возврат, без зависания
+const Z_ATK_HOLD := 0.75       # ровно 3 кадра / 4 fps — рука не стоит на месте
 const Z_CONTACT_T := 0.3       # момент касания внутри удара: на нём включается урон
 const Z_LUNGE := 22.0          # рывок корпуса к цели, px
 const Z_PITCH_BACK := 0.0      # назад не откидываемся: рука уходит вниз сама

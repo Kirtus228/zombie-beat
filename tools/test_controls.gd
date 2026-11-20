@@ -47,7 +47,8 @@ func _init() -> void:
 	enemy.configure(82.0, 90, 5, true, true)   # с мозгом
 	var esf = enemy._build_frames()
 	ok(esf.has_animation("z_atk"), "у зомби есть рывок z_atk")
-	ok(esf.get_frame_count("z_atk") >= 4, "z_atk из 4+ кадров: %d" % esf.get_frame_count("z_atk"))
+	# три кадра — замах, выпад, возврат; повтор вытянутого кадра давал «зависание» руки
+	ok(esf.get_frame_count("z_atk") >= 3, "z_atk из 3+ кадров: %d" % esf.get_frame_count("z_atk"))
 	ok(not esf.has_animation("punch1"), "человеческого прямого удара у зомби НЕТ")
 	ok(esf.has_animation("z_ready"), "у зомби есть видимый замах z_ready")
 	# в ударе зомби не должно быть кадров прыжка: от них он «подпрыгивал»
