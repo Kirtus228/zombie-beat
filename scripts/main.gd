@@ -3,6 +3,8 @@ extends Node2D
 
 const Fighter := preload("res://scripts/fighter.gd")
 const HitFx := preload("res://scripts/hit_fx.gd")
+const Keybinds := preload("res://scripts/keybinds.gd")
+const UiMenu := preload("res://scripts/ui_menu.gd")
 
 # границы с запасом на ширину спрайта: у края боец не должен висеть половинкой
 const ARENA_MIN_X := 110.0
@@ -63,6 +65,13 @@ var attack_pending := 0.0
 
 var world: Node2D
 var demo := false
+# Игра стартует только после меню. auto_start переживает рестарт сцены (R),
+# чтобы «Заново» не выбрасывало обратно на заставку.
+static var auto_start := false
+var playing := false
+var start_guard := 0.0
+var menu: CanvasLayer = null
+var hint_label: Label = null
 var attacker: Node2D = null
 var pending_spawn := 0
 var wave_slot := 0
@@ -74,6 +83,8 @@ var attacks := 0     # диагностика: сколько ударов сд�
 
 func _ready() -> void:
 	randomize()
+	# раскладка применяется до сборки HUD: подсказка строится уже по ней
+	Keybinds.load_saved()
 	_build_street()
 	_build_player()
 	_build_camera()
@@ -87,7 +98,8 @@ func _ready() -> void:
 	_build_hud()
 	_start_music()
 	wave_timer = 1.5
-	if FileAccess.file_exists("res://capture.on"):
+	var capturing := FileAccess.file_exists("res://capture.on")
+	if capturing:
 		print("capture mode on")
 		# "idle" в маркере — записываем игру как её видит игрок, без автопилота
 		var f := FileAccess.open("res://capture.on", FileAccess.READ)
@@ -96,6 +108,33 @@ func _ready() -> void:
 			f.close()
 		demo = not txt.contains("idle")
 		add_child(load("res://scripts/recorder.gd").new())
+	# в headless (тесты, проверка сборки) меню не нужно: нажимать там нечем,
+	# а его Controls потом висят в отчёте об утечках
+	var headless := DisplayServer.get_name() == "headless"
+	if capturing or auto_start or headless:
+		_begin()
+	else:
+		menu = UiMenu.new()
+		menu.play_pressed.connect(_begin)
+		add_child(menu)
+
+
+func _exit_tree() -> void:
+	# меню держит кнопки со стилями: без явного free() при выходе Godot ругается
+	# «Cannot get path of node» и засоряет вывод проверки
+	if menu != null and is_instance_valid(menu):
+		menu.free()
+	menu = null
+
+
+## Снимаем паузу и отдаём управление игроку.
+func _begin() -> void:
+	playing = true
+	auto_start = true
+	start_guard = 0.25   # чтобы клавиша из меню не сработала ударом сразу
+	if menu:
+		menu.queue_free()
+		menu = null
 
 # Трек свой (синтез, tools/make_music.mjs), лицензий и авторских прав нет.
 func _start_music() -> void:
@@ -219,14 +258,31 @@ func _build_hud() -> void:
 
 	hud.add_child(msg_label)
 	# подсказка по управлению: раскладка битэмапа (удар — ЛКМ/Space, прыжок — K, бег — Shift)
-	var hint := Label.new()
-	hint.text = "WASD — шаг   SHIFT — бег   ЛКМ / SPACE — удар   K — прыжок   M — звук   R — заново"
-	hint.position = Vector2(28, 506)
-	hint.add_theme_font_size_override("font_size", 16)
-	hint.add_theme_color_override("font_color", Color(0.72, 0.76, 0.82))
-	hud.add_child(hint)
+	hint_label = Label.new()
+	hint_label.position = Vector2(28, 506)
+	hint_label.add_theme_font_size_override("font_size", 16)
+	hint_label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.82))
+	hud.add_child(hint_label)
+	_update_hint()
+
+
+## Подсказка по управлению собирается из текущей раскладки, а не из константы:
+## после переназначения клавиш игрок должен видеть свои кнопки.
+func _update_hint() -> void:
+	if hint_label == null:
+		return
+	hint_label.text = "%s/%s/%s/%s — шаг   %s — бег   ЛКМ или %s — удар   %s — прыжок   %s — звук   %s — заново" % [
+		Keybinds.key_label("move_up"), Keybinds.key_label("move_left"),
+		Keybinds.key_label("move_down"), Keybinds.key_label("move_right"),
+		Keybinds.key_label("run"), Keybinds.key_label("attack"),
+		Keybinds.key_label("jump"), Keybinds.key_label("mute"), Keybinds.key_label("restart"),
+	]
 
 func _process(delta: float) -> void:
+	if not playing:
+		return
+	if start_guard > 0.0:
+		start_guard -= delta
 	if Input.is_action_just_pressed("mute"):
 		AudioServer.set_bus_mute(0, not AudioServer.is_bus_mute(0))
 	if Input.is_action_just_pressed("restart"):
@@ -262,9 +318,11 @@ func _update_player(_delta: float) -> void:
 	player.position.y = clampf(player.position.y, ARENA_TOP, ARENA_BOTTOM)
 	player.z_index = int(player.position.y)
 	cam.position.x = clampf(player.position.x, 480.0, 1120.0)
-	if Input.is_action_just_pressed("jump"):
+	# первые доли секунды после меню не читаем бой: клавиша, которой закрыли
+	# меню, иначе сразу превращалась в удар
+	if start_guard <= 0.0 and Input.is_action_just_pressed("jump"):
 		player.jump()
-	if Input.is_action_just_pressed("attack") and player.try_attack():
+	if start_guard <= 0.0 and Input.is_action_just_pressed("attack") and player.try_attack():
 		attacks += 1
 		attack_pending = 0.14
 	if attack_pending > 0.0:
